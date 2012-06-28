@@ -39,6 +39,7 @@
 
 #include "smd_private.h"
 #include "acpuclock.h"
+#include "clock.h"
 
 #define A11S_CLK_CNTL_ADDR (MSM_CSR_BASE + 0x100)
 #define A11S_CLK_SEL_ADDR (MSM_CSR_BASE + 0x104)
@@ -1006,6 +1007,25 @@ static void __devinit select_freq_plan(void)
 				&& t->pll2_rate == pll_mhz[ACPU_PLL_2]
 				&& t->pll4_rate == pll_mhz[ACPU_PLL_4]) {
 				acpu_freq_tbl = t->tbl;
+				break;
+			}
+		}
+	}
+
+	/*
+	 * When PLL4 can run max @ 1401.6MHz, we have to support
+	 * dynamic reprograming of PLL4.
+	 *
+	 * Also find the backup pll used during PLL4 reprogramming.
+	 * We are using PLL2@600MHz as backup PLL, since 800MHz jump
+	 * is fine.
+	 */
+	if (t->pll4_rate == 1401) {
+		dynamic_reprogram = 1;
+		for ( ; t->tbl->a11clk_khz; t->tbl++) {
+			if (t->tbl->pll == ACPU_PLL_2 &&
+					t->tbl->a11clk_src_div == 1) {
+				backup_s = t->tbl;
 				break;
 			}
 		}
