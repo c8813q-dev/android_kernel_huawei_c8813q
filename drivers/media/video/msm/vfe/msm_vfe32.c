@@ -6407,6 +6407,9 @@ int msm_vfe_subdev_init(struct v4l2_subdev *sd)
 		sizeof(struct msm_stats_bufq_ctrl));
 	memset(&vfe32_ctrl->stats_ops, 0, sizeof(struct msm_stats_ops));
 
+	memset(&vfe32_ctrl->stats_ctrl, 0, sizeof(struct msm_stats_bufq_ctrl));
+	memset(&vfe32_ctrl->stats_ops, 0, sizeof(struct msm_stats_ops));
+
 	return rc;
 }
 
