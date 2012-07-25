@@ -69,6 +69,7 @@ struct msm_iommu_ctx_dev {
  * @irq:	Interrupt number
  * @clk:	The bus clock for this IOMMU hardware instance
  * @pclk:	The clock for the IOMMU bus interconnect
+ * @aclk:	Alternate clock for this IOMMU core, if any
  *
  * A msm_iommu_drvdata holds the global driver data about a single piece
  * of an IOMMU hardware instance.
