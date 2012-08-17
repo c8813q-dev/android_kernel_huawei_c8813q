@@ -532,6 +532,10 @@ struct kgsl_pagetable *kgsl_mmu_getpagetable(unsigned long name)
 	if (!(cpu_is_msm8625q() && (get_ddr_size() > SZ_512M)))
 		name = KGSL_MMU_GLOBAL_PT;
 #endif
+	/* We presently do not support per-process for IOMMU-v2 */
+	if (!msm_soc_version_supports_iommu_v1())
+		name = KGSL_MMU_GLOBAL_PT;
+
 	pt = kgsl_get_pagetable(name);
 
 	if (pt == NULL)
