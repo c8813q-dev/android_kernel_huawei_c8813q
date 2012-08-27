@@ -88,6 +88,8 @@ int msm_dcvs_idle(int handle, enum msm_core_idle_state state,
  * before the sink driver can be registered.
  */
 struct msm_dcvs_core_info {
+	int					num_cores;
+	int					*sensors;
 	struct msm_dcvs_freq_entry		*freq_tbl;
 	struct msm_dcvs_core_param		core_param;
 	struct msm_dcvs_algo_param		algo_param;
@@ -99,6 +101,7 @@ struct msm_dcvs_core_info {
  * msm_dcvs_register_core
  * @core_name: Unique name identifier for the core.
  * @info: The core specific algorithm parameters.
+ * @sensor: The thermal sensor number of the core in question
  * @return :
  *	0 on success,
  *	-ENOSYS,
@@ -109,7 +112,7 @@ struct msm_dcvs_core_info {
  * Cores that need to run synchronously must share the same group id.
  */
 extern int msm_dcvs_register_core(const char *core_name,
-		struct msm_dcvs_core_info *info);
+		struct msm_dcvs_core_info *info, int sensor);
 
 /**
  * struct msm_dcvs_freq
