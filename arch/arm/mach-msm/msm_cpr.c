@@ -340,12 +340,6 @@ cpr_up_event_handler(struct msm_cpr *cpr, uint32_t new_volt)
 
 	cpr->max_volt_set = (set_volt_uV == cpr->cur_Vmax) ? 1 : 0;
 
-	/**
-	 * Save the new calibrated voltage to be re-used
-	 * whenever we return to same mode after a mode switch.
-	 */
-	chip_data->calibrated_uV = set_volt_uV;
-
 	/* Clear all the interrupts */
 	cpr_write_reg(cpr, RBIF_IRQ_CLEAR, ALL_CPR_IRQ);
 
@@ -388,12 +382,6 @@ cpr_dn_event_handler(struct msm_cpr *cpr, uint32_t new_volt)
 
 	cpr->max_volt_set = 0;
 
-	/**
-	 * Save the new calibrated voltage to be re-used
-	 * whenever we return to same mode after a mode switch.
-	 */
-	chip_data->calibrated_uV = set_volt_uV;
-
 	/* Clear all the interrupts */
 	cpr_write_reg(cpr, RBIF_IRQ_CLEAR, ALL_CPR_IRQ);
 
@@ -429,7 +417,8 @@ static void cpr_set_vdd(struct msm_cpr *cpr, enum cpr_action action)
 	chip_data = &cpr->config->cpr_mode_data[cpr->cpr_mode];
 	error_step = cpr_read_reg(cpr, RBCPR_RESULT_0) >> 2;
 	error_step &= 0xF;
-	curr_volt = chip_data->calibrated_uV;
+
+	curr_volt = regulator_get_voltage(cpr->vreg_cx);
 
 	if (action == UP) {
 		/* Clear IRQ, ACK and return if Vdd already at Vmax */
