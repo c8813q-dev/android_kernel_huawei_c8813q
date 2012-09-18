@@ -2633,4 +2633,9 @@ config MSM_USE_USER_ACCESSIBLE_TIMERS
 	  Enables MSM-specific user accessible timers via a shared
 	  memory page containing the cycle counter.
 
+config MSM_8X60_FUSION_GPIO_GLITCH
+	tristate "Mask unexpected glitch during boot up"
+	help
+	  Enable masking of glitch during boot up, which helps in avoiding unwanted
+	  noise or s/w code from toggling the ap2mdm err fatal.
 endif
