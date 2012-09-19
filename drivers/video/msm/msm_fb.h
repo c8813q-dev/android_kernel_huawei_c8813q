@@ -198,6 +198,14 @@ struct msm_fb_data_type {
 	int vsync_sysfs_created;
 	void *copy_splash_buf;
 	unsigned char *copy_splash_phys;
+	u32 acq_fen_cnt;
+	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
+	int cur_rel_fen_fd;
+	struct sync_pt *cur_rel_sync_pt;
+	struct sync_fence *cur_rel_fence;
+	struct sync_fence *last_rel_fence;
+	struct sw_sync_timeline *timeline;
+	int timeline_value;
 };
 
 struct dentry *msm_fb_get_debugfs_root(void);
