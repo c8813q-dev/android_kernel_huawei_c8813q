@@ -787,6 +787,9 @@ static int msm_fb_resume_sub(struct msm_fb_data_type *mfd)
 	mfd->op_enable = mfd->suspend.op_enable;
 
 	if (mfd->suspend.panel_power_on) {
+		if (mfd->panel_driver_on == FALSE)
+			msm_fb_blank_sub(FB_BLANK_POWERDOWN, mfd->fbi,
+				      mfd->op_enable);
 		ret =
 		     msm_fb_blank_sub(FB_BLANK_UNBLANK, mfd->fbi,
 				      mfd->op_enable);
@@ -1099,14 +1102,8 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			if (ret == 0) {
 				down(&mfd->sem);
 				mfd->panel_power_on = TRUE;
-                                mfd->panel_driver_on = mfd->op_enable;
-				up(&mfd->sem);
-				/* add qcom patch to work around lcd esd issue */
-				/* reduce schedule time from 5s to 3s */
-				mfd->is_panel_alive = TRUE;
-				schedule_delayed_work(&mfd->panel_live_status,
-					msecs_to_jiffies(3000));
-	
+                mfd->panel_driver_on = mfd->op_enable;
+
 /* LCD resume completed ,then turn on lcd backlight */
 #ifdef CONFIG_HUAWEI_KERNEL
 				lcd_have_resume = TRUE;
@@ -1117,7 +1114,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 					last_backlight_setting = FALSE;
 					printk("%s:Waiting for LCD resume ,then set backlight level=%d\n",__func__,last_backlight_level);
 				}
-                
+#ifdef CONFIG_FB_DYNAMIC_GAMMA  
                 /* delete the judgement is_panel_support_dynamic_gamma() */
 				if(TRUE == last_gamma_setting)
 				{
@@ -1125,7 +1122,8 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 					last_gamma_setting = FALSE;
 					printk("%s:Waiting for LCD resume ,then set gamma mode =%d\n",__func__,last_gamma_mode);
 				}
-
+#endif
+#ifdef CONFIG_FB_AUTO_CABC
                 /* delete the judgement is_panel_support_auto_cabc() */
 				if(TRUE == last_cabc_setting)
 				{
@@ -1133,7 +1131,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 					last_cabc_setting =FALSE;
 					printk("%s:Waiting for LCD resume ,then set cabc mode =%d\n",__func__,last_cabc_mode.mode);
 				}
-
+#endif
 #endif
 			}
 		}
@@ -1318,6 +1316,12 @@ static int msm_fb_blank(int blank_mode, struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	msm_fb_pan_idle(mfd);
+	if (mfd->op_enable == 0) {
+		if (blank_mode == FB_BLANK_UNBLANK)
+			mfd->suspend.panel_power_on = TRUE;
+		else
+			mfd->suspend.panel_power_on = FALSE;
+	}
 	return msm_fb_blank_sub(blank_mode, info, mfd->op_enable);
 }
 
