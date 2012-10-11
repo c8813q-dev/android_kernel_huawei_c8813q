@@ -144,6 +144,12 @@ enum cp_mem_usage {
  */
 #define ION_IOMMU_UNMAP_DELAYED 1
 
+/*
+ * This flag allows clients to defer unsecuring a buffer until the buffer
+ * is actually freed.
+ */
+#define ION_UNSECURE_DELAYED	1
+
 #ifdef __KERNEL__
 #include <linux/err.h>
 #include <mach/ion.h>
@@ -552,6 +558,26 @@ int msm_ion_secure_heap_2_0(int heap_id, enum cp_mem_usage usage);
  * Returns 0 on success
  */
 int msm_ion_unsecure_heap_2_0(int heap_id, enum cp_mem_usage usage);
+
+/**
+ * msm_ion_secure_buffer - secure an individual buffer
+ *
+ * @client - client who has access to the buffer
+ * @handle - buffer to secure
+ * @usage - usage hint to TZ
+ * @flags - flags for the securing
+ */
+int msm_ion_secure_buffer(struct ion_client *client, struct ion_handle *handle,
+				enum cp_mem_usage usage, int flags);
+
+/**
+ * msm_ion_unsecure_buffer - unsecure an individual buffer
+ *
+ * @client - client who has access to the buffer
+ * @handle - buffer to secure
+ */
+int msm_ion_unsecure_buffer(struct ion_client *client,
+				struct ion_handle *handle);
 
 /**
  * msm_ion_do_cache_op - do cache operations.
