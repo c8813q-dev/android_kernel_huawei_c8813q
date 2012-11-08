@@ -39,6 +39,8 @@
 #define ENABLE_VOTED	4	/* Bit pol: 1 = running; delay on disable */
 #define DELAY		5	/* No bit to check, just delay */
 
+#define MAX_VDD_LEVELS			4
+
 /**
  * struct clk_vdd_class - Voltage scaling class
  * @class_name: name of the class
@@ -51,8 +53,7 @@ struct clk_vdd_class {
 	const char *class_name;
 	int (*set_vdd)(struct clk_vdd_class *v_class, int level);
 	int *level_votes;
-	int num_levels;
-	unsigned long cur_level;
+	int num_levels;	unsigned long cur_level;
 	struct mutex lock;
 };
 
@@ -62,8 +63,7 @@ struct clk_vdd_class {
 		.set_vdd = _set_vdd, \
 		.level_votes = (int [_num_levels]) {}, \
 		.num_levels = _num_levels, \
-		.cur_level = _num_levels, \
-		.lock = __MUTEX_INITIALIZER(_name.lock) \
+		.cur_level = _num_levels, \		.lock = __MUTEX_INITIALIZER(_name.lock) \
 	}
 
 enum handoff {
