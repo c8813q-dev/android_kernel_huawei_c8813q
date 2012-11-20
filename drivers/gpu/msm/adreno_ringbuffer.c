@@ -543,7 +543,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	 * support, we must use the global timestamp since issueibcmds
 	 * will be returning that one.
 	 */
-	if (context->flags & CTXT_FLAGS_PER_CONTEXT_TS)
+	if (context && context->flags & CTXT_FLAGS_PER_CONTEXT_TS)
 		context_id = context->id;
 
 	/* reserve space to temporarily turn off protected mode
@@ -563,7 +563,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		total_sizedwords += 2; /* CP_WAIT_FOR_IDLE */
 
 	total_sizedwords += 2; /* scratchpad ts for recovery */
-	if (context->flags & CTXT_FLAGS_PER_CONTEXT_TS) {
+	if (context && context->flags & CTXT_FLAGS_PER_CONTEXT_TS) {
 		total_sizedwords += 3; /* sop timestamp */
 		total_sizedwords += 4; /* eop timestamp */
 		total_sizedwords += 3; /* global timestamp without cache
@@ -649,7 +649,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		GSL_RB_WRITE(ringcmds, rcmd_gpu, 0x00);
 	}
 
-	if (context->flags & CTXT_FLAGS_PER_CONTEXT_TS) {
+	if (context && context->flags & CTXT_FLAGS_PER_CONTEXT_TS) {
 		/* start-of-pipeline timestamp */
 		GSL_RB_WRITE(ringcmds, rcmd_gpu,
 			cp_type3_packet(CP_MEM_WRITE, 2));
