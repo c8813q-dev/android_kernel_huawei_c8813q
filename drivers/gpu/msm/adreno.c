@@ -2593,6 +2593,7 @@ static const struct kgsl_functable adreno_functable = {
 	.setproperty = adreno_setproperty,
 	.next_event = adreno_next_event,
 	.postmortem_dump = adreno_dump,
+	.next_event = adreno_next_event,
 };
 
 static struct platform_driver adreno_platform_driver = {
