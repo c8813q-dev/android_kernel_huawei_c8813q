@@ -1906,11 +1906,11 @@ static void __init msm_cpr_init(void)
 	 * a 1.2GHz part by a chip characterization recommended value.
 	 * Ditto for a 1.0GHz part.
 	 */
-	if (msm8625_cpu_id() == MSM8625A) {
+	if ((msm8625_cpu_id() == MSM8625A) && !cpu_is_msm8625q()) {
 		msm_cpr_pdata.max_quot += 30;
 		if (msm_cpr_pdata.max_quot > 1400)
 			msm_cpr_pdata.max_quot = 1400;
-	} else if (msm8625_cpu_id() == MSM8625) {
+	} else if ((msm8625_cpu_id() == MSM8625) && !cpu_is_msm8625q()) {
 		msm_cpr_pdata.max_quot += 50;
 		if (msm_cpr_pdata.max_quot > 1350)
 			msm_cpr_pdata.max_quot = 1350;
@@ -1944,7 +1944,7 @@ static void __init msm_cpr_init(void)
 	pr_info("%s: cpr: floor_fuse: 0x%x\n", __func__, cpr_info->floor_fuse);
 	kfree(cpr_info);
 
-	if (msm8625_cpu_id() == MSM8625A)
+	if ((msm8625_cpu_id() == MSM8625A) || cpu_is_msm8625q())
 		msm_cpr_pdata.max_freq = 1209600;
 	else if (msm8625_cpu_id() == MSM8625)
 		msm_cpr_pdata.max_freq = 1008000;
