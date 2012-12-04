@@ -854,6 +854,7 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
    	#else
    		input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
    	#endif
+		break;
 	case KEY_MEDIA:
 #ifdef CONFIG_HUAWEI_KERNEL
         /* add 2s wake lock here to fix issue that time of press headset key  
