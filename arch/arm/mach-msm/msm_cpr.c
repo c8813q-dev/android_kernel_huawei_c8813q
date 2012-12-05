@@ -54,7 +54,7 @@ void __iomem *virt_start_ptr;
 static struct platform_device *cpr_pdev;
 
 static bool enable = 1;
-static bool disable_cpr;
+static bool disable_cpr = true;
 module_param(enable, bool, 0644);
 MODULE_PARM_DESC(enable, "CPR Enable");
 
@@ -935,7 +935,6 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 
 	if (pdata->disable_cpr == true) {
 		pr_err("CPR disabled by modem\n");
-		disable_cpr = true;
 		return -EPERM;
 	}
 
@@ -1068,6 +1067,7 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 	cpufreq_register_notifier(&cpr->freq_transition,
 					CPUFREQ_TRANSITION_NOTIFIER);
 
+	disable_cpr = false;
 	pr_info("CPR: driver registered successfully\n");
 
 	return res;
