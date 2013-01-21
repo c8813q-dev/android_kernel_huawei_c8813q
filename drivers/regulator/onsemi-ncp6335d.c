@@ -34,6 +34,7 @@
 #define NCP6335D_STEP_VOLTAGE_UV	6250
 #define NCP6335D_MIN_SLEW_NS		333
 #define NCP6335D_MAX_SLEW_NS		2666
+#define NCP6335D_DEF_VTG_UV		1100000
 
 /* bits */
 #define NCP6335D_ENABLE			BIT(7)
@@ -60,6 +61,8 @@ struct ncp6335d_info {
 	int slew_rate;
 };
 
+static struct ncp6335d_info *ncp6335d;
+
 static void dump_registers(struct ncp6335d_info *dd,
 			unsigned int reg, const char *func)
 {
@@ -68,6 +71,29 @@ static void dump_registers(struct ncp6335d_info *dd,
 	regmap_read(dd->regmap, reg, &val);
 	dev_dbg(dd->dev, "%s: NCP6335D: Reg = %x, Val = %x\n", func, reg, val);
 }
+
+int ncp6335d_restart_config()
+{
+	int rc, set_val;
+
+	if (!ncp6335d) {
+		dev_err(ncp6335d->dev,
+			"OnSemi NCP6335D driver not intialized\n");
+		return -ENODEV;
+	}
+
+	set_val = DIV_ROUND_UP(NCP6335D_DEF_VTG_UV - NCP6335D_MIN_VOLTAGE_UV,
+						NCP6335D_STEP_VOLTAGE_UV);
+	rc = regmap_update_bits(ncp6335d->regmap, ncp6335d->vsel_reg,
+		NCP6335D_VOUT_SEL_MASK, (set_val & NCP6335D_VOUT_SEL_MASK));
+	if (rc)
+		dev_err(ncp6335d->dev, "Unable to set volatge rc(%d)", rc);
+	else
+		udelay(20);
+
+	return rc;
+}
+EXPORT_SYMBOL(ncp6335d_restart_config);
 
 static void ncp633d_slew_delay(struct ncp6335d_info *dd,
 					int prev_uV, int new_uV)
@@ -368,6 +394,8 @@ static int __devinit ncp6335d_regulator_probe(struct i2c_client *client,
 						PTR_ERR(dd->regulator));
 		return PTR_ERR(dd->regulator);
 	}
+
+	ncp6335d = dd;
 
 	return 0;
 }
