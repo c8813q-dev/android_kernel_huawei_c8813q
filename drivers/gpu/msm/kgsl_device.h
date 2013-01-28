@@ -116,7 +116,7 @@ struct kgsl_functable {
 	void (*next_event)(struct kgsl_device *device,
 		struct kgsl_event *event);
 	int (*postmortem_dump) (struct kgsl_device *device, int manual);
-	void (*next_event)(struct kgsl_device *device,
+	int (*next_event)(struct kgsl_device *device,
 		struct kgsl_event *event);
 };
 
