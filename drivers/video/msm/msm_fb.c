@@ -1046,12 +1046,10 @@ void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl)
 
 /* Remove qcom backlight mechanism,user our own */
 #ifndef CONFIG_HUAWEI_KERNEL
-	if (!mfd->panel_power_on || !bl_updated) {
-		unset_bl_level = bkl_lvl;
+	unset_bl_level = bkl_lvl;
+
+	if (!mfd->panel_power_on || !bl_updated)
 		return;
-	} else {
-		unset_bl_level = 0;
-	}
 #endif
 
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
@@ -1479,7 +1477,7 @@ static void mipi_dsi_reset_display(struct work_struct *work)
 		mdp_dma_pan_update(mfd->fbi);
 
 #ifndef CONFIG_HUAWEI_KERNEL
-	if (!unset_bl_level)
+	if (!bl_updated)
 		unset_bl_level = temp_level;
 	schedule_delayed_work(&mfd->backlight_worker, backlight_duration);
 #endif
