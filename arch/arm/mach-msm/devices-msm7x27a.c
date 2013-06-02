@@ -2312,6 +2312,7 @@ postcore_initcall(msm7627a_init_gpio);
 static int msm7627a_panic_handler(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
+	msm_clk_dump_debug_info();
 	flush_cache_all();
 	outer_flush_all();
 	return NOTIFY_DONE;
