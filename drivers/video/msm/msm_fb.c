@@ -4008,8 +4008,7 @@ int msm_fb_config_cabc(struct msm_fb_data_type *mfd, struct msmfb_cabc_config ca
 
 static int msmfb_notify_update(struct fb_info *info, void __user *argp)
 {
-	int ret;
-	unsigned int notify;
+	unsigned int ret = 0, notify = 0;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
 	ret = copy_from_user(&notify, argp, sizeof(unsigned int));
@@ -4275,11 +4274,13 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	struct msmfb_metadata mdp_metadata;
 	struct mdp_buf_sync buf_sync;
 	int ret = 0;
-	msm_fb_pan_idle(mfd);
 
-	if (!info || !info->par)
-		return -EINVAL;
-	mfd = (struct msm_fb_data_type *)info->par;
+	if (!info || !(info->par))
+                 return -EINVAL;
+ 
+         mfd = (struct msm_fb_data_type *)info->par;
+
+        msm_fb_pan_idle(mfd);
 
 	switch (cmd) {
 #ifdef CONFIG_FB_MSM_OVERLAY
