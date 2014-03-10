@@ -258,26 +258,24 @@ static int process_mem_print(struct seq_file *s, void *unused)
 
 static int process_mem_open(struct inode *inode, struct file *file)
 {
-	int ret;
-	pid_t pid = (pid_t) (unsigned long) inode->i_private;
-	struct kgsl_process_private *private = NULL;
+	struct kgsl_process_private *private = inode->i_private;
 
-	private = kgsl_process_private_find(pid);
+	/*
+	 * Hold a reference count on the process while open
+	 * in case the process tries to die in the meantime.
+	 * If the process is already dying we cannot get a
+	 * refcount, print nothing.
+	 */
 
-	if (!private)
+	if (!private || !kgsl_process_private_get(private))
 		return -ENODEV;
 
-	ret = single_open(file, process_mem_print, private);
-	if (ret)
-		kgsl_process_private_put(private);
-
-	return ret;
+	return single_open(file, process_mem_print, private);
 }
 
 static int process_mem_release(struct inode *inode, struct file *file)
 {
-	struct kgsl_process_private *private =
-		((struct seq_file *)file->private_data)->private;
+	struct kgsl_process_private *private = inode->i_private;
 
 	if (private)
 		kgsl_process_private_put(private);

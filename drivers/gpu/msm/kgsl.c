@@ -1031,10 +1031,12 @@ kgsl_get_process_private(struct kgsl_device *device)
 		unsigned long pt_name;
 
 		pt_name = task_tgid_nr(current);
-		private->pagetable =
-			kgsl_mmu_getpagetable(pt_name);
-		if (private->pagetable == NULL)
-			goto error;
+		private->pagetable = kgsl_mmu_getpagetable(pt_name);
+		if (private->pagetable == NULL) {
+			mutex_unlock(&private->process_private_mutex);
+			kgsl_process_private_put(private);
+			return NULL;
+		}
 	}
 
 	if (kgsl_process_init_sysfs(private))
