@@ -257,7 +257,7 @@ void __init msm_init_pmic_vibrator(void)
 	timed_output_dev_register(&pmic_vibrator);
 
 #ifdef CONFIG_HUAWEI_VIBRATOR_INTENSITY_SYSFS
-	volt_value = get_vibrator_voltage();
+	volt_value = PMIC_VIBRATOR_LEVEL;
 
 	err = device_create_file(pmic_vibrator.dev, &dev_attr_intensity);
 	if (err < 0)
