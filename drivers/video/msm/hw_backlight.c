@@ -32,8 +32,8 @@
 #define ADD_VALUE			4
 #define PWM_LEVEL_ADJUST	226
 /*modify the min value*/
-#define BL_MIN_LEVEL 13
-#define G610C_BL_MIN_LEVEL 10
+#define BL_MIN_LEVEL 1
+#define G610C_BL_MIN_LEVEL 1
 #define G610C_BL_MAX_LEVEL 250
 static struct msm_fb_data_type *mfd_local;
 static boolean backlight_set = FALSE;
