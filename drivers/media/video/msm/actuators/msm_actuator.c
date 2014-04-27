@@ -198,6 +198,8 @@ static int32_t msm_actuator_write_focus(
 			return rc;
 		}
 		curr_lens_pos = next_lens_pos;
+        if(0 == damping_code_step)
+            break;
 	}
 
 	if (curr_lens_pos != code_boundary) {
@@ -489,8 +491,7 @@ static int32_t msm_actuator_init(struct msm_actuator_ctrl_t *a_ctrl,
 		return -EFAULT;
 	}
 	a_ctrl->pwd_step = set_info->af_tuning_params.pwd_step;
-	a_ctrl->total_steps = set_info->af_tuning_params.total_steps;
-
+	//delete this line for it is a duplicated written as the line before
 	if (copy_from_user(&a_ctrl->region_params,
 		(void *)set_info->af_tuning_params.region_params,
 		a_ctrl->region_size * sizeof(struct region_params_t)))

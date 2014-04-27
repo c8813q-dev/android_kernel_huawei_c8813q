@@ -34,6 +34,192 @@
 #include "board-msm7627a.h"
 #include "devices-msm7x2xa.h"
 
+/* update Qualcomm 1020 baseline houming modified
+  */
+#include <mach/rpc_pmapp.h>
+//add keypad driver
+#include "msm-keypad-devices.h"
+#include <linux/hardware_self_adapt.h>
+#include <linux/touch_platform_config.h>
+#ifdef CONFIG_HUAWEI_NFC_PN544
+#include <linux/nfc/pn544.h>
+#endif
+
+#include <linux/cyttsp4_bus.h>
+#include <linux/cyttsp4_core.h>
+#include <linux/cyttsp4_btn.h>
+#include <linux/cyttsp4_mt.h>
+#define MSM_7x27A_TOUCH_RESET_PIN 96 //13
+#define MSM_7X27A_TOUCH_INT_PIN 82
+atomic_t touch_detected_yet = ATOMIC_INIT(0);
+
+//delete this line
+
+#ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP4_INCLUDE_FW
+#include "linux/cyttsp4_img.h"
+static struct cyttsp4_touch_firmware cyttsp4_firmware = {
+	.img = cyttsp4_img,
+	.size = ARRAY_SIZE(cyttsp4_img),
+	.ver = cyttsp4_ver,
+	.vsize = ARRAY_SIZE(cyttsp4_ver),
+};
+#else
+static struct cyttsp4_touch_firmware cyttsp4_firmware = {
+	.img = NULL,
+	.size = 0,
+	.ver = NULL,
+	.vsize = 0,
+};
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP4_AUTO_LOAD_TOUCH_PARAMS
+#if 0
+#include <linux/cyttsp4_params.h>
+static struct touch_settings cyttsp4_sett_param_regs = {
+       .data = (uint8_t *)&cyttsp4_param_regs[0],
+       .size = ARRAY_SIZE(cyttsp4_param_regs),
+       .tag = 0,
+};
+
+static struct touch_settings cyttsp4_sett_param_size = {
+       .data = (uint8_t *)&cyttsp4_param_size[0],
+       .size = ARRAY_SIZE(cyttsp4_param_size),
+       .tag = 0,
+};
+#endif
+
+#include <linux/Config_G610_V0004.h>
+static struct touch_settings cyttsp4_sett_truly_regs = {
+       .data = (uint8_t *)&cyttsp4_param_regs[0],
+       .size = ARRAY_SIZE(cyttsp4_param_regs),
+       .tag = 0,
+};
+
+struct cyttsp4_sett_param_map cyttsp4_config_param_map[] = {
+    
+	[0] = {
+			  .id = 0,
+			  .param = &cyttsp4_sett_truly_regs,
+		  },
+	[1] = {
+			  .id = 2,
+			  .param = &cyttsp4_sett_truly_regs,//&cyttsp4_sett_truly_regs,
+		  },
+	[2] = {
+			  .id = 4,
+			  .param = &cyttsp4_sett_truly_regs,//&cyttsp4_sett_truly_regs,
+		  },
+	[3] = {
+			  .id = 6,
+			  .param = &cyttsp4_sett_truly_regs,//&cyttsp4_sett_truly_regs,
+		  },
+	[4] = {
+			  .param = NULL,
+		  },
+};
+
+static struct touch_settings cyttsp4_sett_param_regs = {
+       .data = NULL,
+       .size = 0,
+       .tag = 0,
+};
+
+static struct touch_settings cyttsp4_sett_param_size = {
+       .data = NULL,
+       .size = 0,
+       .tag = 0,
+};
+
+#else
+static struct touch_settings cyttsp4_sett_param_regs = {
+       .data = NULL,
+       .size = 0,
+       .tag = 0,
+};
+
+static struct touch_settings cyttsp4_sett_param_size = {
+       .data = NULL,
+       .size = 0,
+       .tag = 0,
+};
+
+struct cyttsp4_sett_param_map cyttsp4_config_param_map[] = {
+    
+	[0] = {
+			  .id = 0,
+			  .param = NULL,
+		  },
+	
+	[1] = {
+			  .id = 2,
+			  .param = NULL,
+		  },
+    [2] = {
+			  .param = NULL,
+		  },
+		  
+};
+#endif
+
+static struct cyttsp4_loader_platform_data _cyttsp4_loader_platform_data = {
+	.fw = &cyttsp4_firmware,
+	.param_regs = &cyttsp4_sett_param_regs,
+	.param_size = &cyttsp4_sett_param_size,
+	.param_map = cyttsp4_config_param_map,
+	.flags = 0,
+};
+
+
+#define CYTTSP4_USE_I2C
+/* #define CYTTSP4_USE_SPI */
+
+#ifdef CYTTSP4_USE_I2C
+#define CYTTSP4_I2C_NAME "cyttsp4_i2c_adapter"
+#define CYTTSP4_I2C_TCH_ADR 0x1A
+#define CYTTSP4_LDR_TCH_ADR 0x1A
+#define CYTTSP4_I2C_IRQ_GPIO  82 /* J6.9, C19, GPMC_AD14/GPIO_38 */
+#define CYTTSP4_I2C_RST_GPIO  96 /* J6.10, D18, GPMC_AD13/GPIO_37 */
+#endif
+
+#ifdef CYTTSP4_USE_SPI
+#define CYTTSP4_SPI_NAME "cyttsp4_spi_adapter"
+/* Change GPIO numbers when using I2C and SPI at the same time
+ * Following is possible alternative:
+ * IRQ: J6.17, C18, GPMC_AD12/GPIO_36
+ * RST: J6.24, D17, GPMC_AD11/GPIO_35
+ */
+#define CYTTSP4_SPI_IRQ_GPIO 38 /* J6.9, C19, GPMC_AD14/GPIO_38 */
+#define CYTTSP4_SPI_RST_GPIO 37 /* J6.10, D18, GPMC_AD13/GPIO_37 */
+#endif
+
+/* Check GPIO numbers if both I2C and SPI are enabled */
+#if defined(CYTTSP4_USE_I2C) && defined(CYTTSP4_USE_SPI)
+#if CYTTSP4_I2C_IRQ_GPIO == CYTTSP4_SPI_IRQ_GPIO || \
+	CYTTSP4_I2C_RST_GPIO == CYTTSP4_SPI_RST_GPIO
+#error "GPIO numbers should be different when both I2C and SPI are on!"
+#endif
+#endif
+#define CY_MAXX 720
+#define CY_MAXY 1280
+#define CY_MINX 0
+#define CY_MINY 0
+
+#define CY_ABS_MIN_X CY_MINX
+#define CY_ABS_MIN_Y CY_MINY
+#define CY_ABS_MAX_X CY_MAXX
+#define CY_ABS_MAX_Y CY_MAXY
+#define CY_ABS_MIN_P 0
+#define CY_ABS_MAX_P 255
+#define CY_ABS_MIN_W 0
+#define CY_ABS_MAX_W 255
+
+#define CY_ABS_MIN_T 0
+
+#define CY_ABS_MAX_T 15
+
+#define CY_IGNORE_VALUE 0xFFFF
+/* Cypress cyttsp4 end */
+
 #define ATMEL_TS_I2C_NAME "maXTouch"
 #define ATMEL_X_OFFSET 13
 #define ATMEL_Y_OFFSET 0
@@ -118,6 +304,7 @@ static const unsigned short keymap[ARRAY_SIZE(kp_col_gpios) *
 };
 
 /* SURF keypad platform device information */
+#ifndef CONFIG_HUAWEI_GPIO_KEYPAD  /*added by lishubin update to 1215*/
 static struct gpio_event_matrix_info kp_matrix_info = {
 	.info.func	= gpio_event_matrix_func,
 	.keymap		= keymap,
@@ -148,6 +335,7 @@ static struct platform_device kp_pdev = {
 		.platform_data	= &kp_pdata,
 	},
 };
+#endif /*added by lishubin update to 1215*/
 
 /* 8625 keypad device information */
 static unsigned int kp_row_gpios_8625[] = {31};
@@ -376,6 +564,731 @@ static struct mxt_platform_data mxt_platform_data = {
 	.key_codes		= mxt_key_codes,
 };
 
+/* update Qualcomm 1020 baseline houming modified
+  */
+/* -------------------- huawei touch -------------------- */
+#define IC_PM_ON   1
+#define IC_PM_OFF  0
+
+static int power_switch(int pm)
+{
+#if 0
+	int rc = 0;
+	
+	if (IC_PM_ON == pm)
+	{
+		
+		vreg_l12 = vreg_get(NULL,"gp2");
+		if (IS_ERR(vreg_l12)) 
+		{
+			pr_err("%s:l12 power init get failed\n", __func__);
+			goto err_power_fail;
+		}
+		
+		rc = vreg_set_level(vreg_l12, 2850);
+		if(rc)
+		{
+			pr_err("%s:l12 power init faild\n",__func__);
+			goto err_power_fail;
+		}
+
+		
+		rc = vreg_enable(vreg_l12);
+		if (rc) 
+		{
+			pr_err("%s:l12 power init failed \n", __func__);
+		}
+
+		mdelay(50);     
+
+	}
+	else if(IC_PM_OFF == pm)
+	{
+		if(NULL != vreg_l12)
+		{
+			rc = vreg_disable(vreg_l12);
+			if (rc)
+			{
+				pr_err("%s:l12 power disable failed \n", __func__);
+			}
+		}
+	}
+	else 
+	{
+		rc = -EPERM;
+		pr_err("%s:l12 power switch not support yet!\n", __func__);	
+	}
+err_power_fail:
+	return rc;
+#endif
+	return 0;
+}
+
+/* modify function name and gpio config */
+/*Multipe use gpio_request function has been mistakes */
+
+/* use gpio free to release */
+static int set_touch_interrupt_gpio(void)
+{
+    int gpio_config = 0;
+    int ret = 0;
+
+	gpio_config = GPIO_CFG(MSM_7X27A_TOUCH_INT_PIN,0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,GPIO_CFG_2MA);
+	ret = gpio_tlmm_config(gpio_config, GPIO_CFG_ENABLE);
+	if (ret)
+	{
+		pr_err("%s:touch int gpio config failed\n", __func__);
+		return ret;
+	}
+	ret = gpio_request(MSM_7X27A_TOUCH_INT_PIN, "TOUCH_INT");
+	if (ret)
+	{
+		pr_err("%s:touch int gpio request failed\n", __func__);
+		return ret;
+	}
+	ret = gpio_direction_input(MSM_7X27A_TOUCH_INT_PIN);
+	if (ret)
+	{
+		pr_err("%s:touch int gpio input failed\n", __func__);
+		return ret;
+	}
+
+    gpio_free(MSM_7X27A_TOUCH_INT_PIN);
+	return ret;
+}
+/*we use this to detect the probe is detected*/
+static void set_touch_probe_flag(int detected)
+{
+	if(detected >= 0)
+	{
+		atomic_set(&touch_detected_yet, 1);
+	}
+	else
+	{
+		atomic_set(&touch_detected_yet, 0);
+	}
+	
+	return;
+}
+static int read_touch_probe_flag(void)
+{	
+	return atomic_read(&touch_detected_yet);
+}
+
+/*this function reset touch panel */
+/*Multipe use gpio_request function has been mistakes */
+
+/* use gpio free to release */
+static int touch_reset(void)
+{
+	int ret = 0;
+    int gpio_config = 0;	
+	gpio_config = GPIO_CFG(MSM_7x27A_TOUCH_RESET_PIN,0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP,GPIO_CFG_2MA);
+	ret = gpio_tlmm_config(gpio_config, GPIO_CFG_ENABLE);
+	if (ret)
+	{
+		pr_err("%s:touch int gpio config failed\n", __func__);
+		return ret;
+	}
+	ret = gpio_request(MSM_7x27A_TOUCH_RESET_PIN, "TOUCH_RESET");
+	if (ret)
+	{
+		pr_err("%s:touch int gpio request failed\n", __func__);
+		return ret;
+	}
+	
+	ret = gpio_direction_output(MSM_7x27A_TOUCH_RESET_PIN, 1);
+	mdelay(5);
+	ret = gpio_direction_output(MSM_7x27A_TOUCH_RESET_PIN, 0);
+	mdelay(10);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+	ret = gpio_direction_output(MSM_7x27A_TOUCH_RESET_PIN, 1);
+	mdelay(50);//must more than 10ms.
+
+	gpio_free(MSM_7x27A_TOUCH_RESET_PIN);
+	return ret;
+}
+/*this function return reset gpio at 7x30 platform */
+static int get_touch_reset_gpio(void)
+{
+	return MSM_7x27A_TOUCH_RESET_PIN;
+}
+
+/*this function get the tp  resolution*/
+static int get_touch_resolution(struct tp_resolution_conversion *tp_resolution_type)
+{	
+    /* when sub boardid equals HW_VER_SUB_V1 G520 support qhd */
+    hw_product_sub_type product_sub_type = get_hw_sub_board_id();
+
+    if( machine_is_msm8x25_C8950D()
+        || machine_is_msm8x25_G610C()
+        || (machine_is_msm8x25_G520U() && HW_VER_SUB_V1 == product_sub_type) )
+	{
+	    tp_resolution_type->lcd_x = LCD_X_QHD;
+		tp_resolution_type->lcd_y = LCD_Y_QHD;   
+		tp_resolution_type->lcd_all = LCD_ALL_QHD_45INCHTP;
+	}
+	else if( machine_is_msm8x25_U8951()			
+            || machine_is_msm8x25_C8813()
+            || machine_is_msm8x25_G520U() 
+            || machine_is_msm8x25_C8813Q() )
+	{
+	    tp_resolution_type->lcd_x = LCD_X_FWVGA;
+		tp_resolution_type->lcd_y = LCD_Y_FWVGA;   
+		tp_resolution_type->lcd_all = LCD_ALL_FWVGA_45INCHTP;
+	}
+	else
+	{
+	    tp_resolution_type->lcd_x = LCD_X_WVGA;
+		tp_resolution_type->lcd_y = LCD_Y_WVGA;   
+		tp_resolution_type->lcd_all = LCD_ALL_WVGA_4INCHTP;
+	}
+	return 1;
+}
+static struct touch_hw_platform_data touch_hw_data = 
+{
+	.touch_power = power_switch,
+	.set_touch_interrupt_gpio = set_touch_interrupt_gpio,
+	.set_touch_probe_flag = set_touch_probe_flag,
+	.read_touch_probe_flag = read_touch_probe_flag,
+	.touch_reset = touch_reset,
+	.get_touch_reset_gpio = get_touch_reset_gpio,
+	.get_touch_resolution = get_touch_resolution,
+};
+
+/* -------------------- huawei sensors -------------------- */
+static int gs_init_flag = 0;   /*gsensor is not initialized*/
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_ADI_ADXL346
+static int gsensor_support_dummyaddr_adi346(void)
+{
+    int ret = -1;	/*default value means actual address*/
+
+    ret = (int)GS_ADI346;
+
+    return ret;
+}
+
+static struct gs_platform_data gs_adi346_platform_data = {
+    .adapt_fn = gsensor_support_dummyaddr_adi346,
+    .slave_addr = (0xA6 >> 1),  /*i2c slave address*/
+    .dev_id = 0x00,    /*WHO AM I*/
+    .init_flag = &gs_init_flag,
+    .get_compass_gs_position=get_compass_gs_position,
+};
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_KXTIK1004
+static int gsensor_support_dummyaddr_kxtik(void)
+{
+    int ret = -1;	/*default value means actual address*/
+    ret = (int)GS_KXTIK1004;
+    return ret;
+}
+
+static struct gs_platform_data gs_kxtik_platform_data = {
+    .adapt_fn = gsensor_support_dummyaddr_kxtik,
+    .slave_addr = (0x1E >> 1),  /*i2c slave address*/
+    .dev_id = 0x05,    /*WHO AM I*/
+    .init_flag = &gs_init_flag,
+    .get_compass_gs_position=get_compass_gs_position,
+};
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_MMA8452
+static struct gs_platform_data gs_mma8452_platform_data = {
+    .adapt_fn = NULL,
+    .slave_addr = (0x38 >> 1),  /*i2c slave address*/
+    .dev_id = 0x2A,    /*WHO AM I*/
+    .init_flag = &gs_init_flag,
+    .get_compass_gs_position=get_compass_gs_position,
+};
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_ST_LIS3XH
+static struct gs_platform_data gs_st_lis3xh_platform_data = {
+    .adapt_fn = NULL,
+    .slave_addr = (0x30 >> 1),  /*i2c slave address*/
+    .dev_id = 0x00,    /*WHO AM I*/
+    .init_flag = &gs_init_flag,
+    .get_compass_gs_position=get_compass_gs_position,
+};
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_PROXIMITY_EVERLIGHT_APS_9900
+static int aps9900_gpio_config_interrupt(void)
+{
+    int gpio_config = 0;
+    int ret = 0;
+  
+    gpio_config = GPIO_CFG(MSM_7X27A_APS9900_INT, 0, GPIO_CFG_INPUT,GPIO_CFG_PULL_UP, GPIO_CFG_2MA);
+    ret = gpio_tlmm_config(gpio_config, GPIO_CFG_ENABLE);
+    return ret; 
+}
+
+static struct aps9900_hw_platform_data aps9900_hw_data = {
+    .aps9900_gpio_config_interrupt = aps9900_gpio_config_interrupt,
+};
+#endif
+
+/* -------------------- huawei nfc -------------------- */
+#ifdef CONFIG_HUAWEI_NFC_PN544
+/* this function is used to reset pn544 by controlling the ven pin */
+static int pn544_ven_reset(void)
+{
+	int ret=0;
+	int gpio_config=0;
+	
+	gpio_config = GPIO_CFG(GPIO_NFC_VEN, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
+	ret = gpio_tlmm_config(gpio_config, GPIO_CFG_ENABLE);
+	ret = gpio_request(GPIO_NFC_VEN, "gpio 113 for NFC pn544");
+	ret = gpio_direction_output(GPIO_NFC_VEN,0);
+	/* pull up first, then pull down for 10 ms, and enable last */
+	gpio_set_value(GPIO_NFC_VEN, 1);
+	mdelay(5);
+	gpio_set_value(GPIO_NFC_VEN, 0);
+
+	mdelay(10);
+	gpio_set_value(GPIO_NFC_VEN, 1);
+	mdelay(5);
+	return 0;
+}
+
+static int pn544_interrupt_gpio_config(void)
+{
+	int ret=0;
+	int gpio_config=0;
+	gpio_config = GPIO_CFG(GPIO_NFC_INT, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA);
+	ret = gpio_tlmm_config(gpio_config, GPIO_CFG_ENABLE);
+	ret = gpio_request(GPIO_NFC_INT, "gpio 114 for NFC pn544");
+	ret = gpio_direction_input(GPIO_NFC_INT);
+	return 0;
+}
+
+static int pn544_fw_download_pull_down(void)
+{
+	gpio_set_value(GPIO_NFC_LOAD, 1);
+	mdelay(5);
+	gpio_set_value(GPIO_NFC_LOAD, 0);
+	mdelay(5);
+	return 0;	
+}
+
+static int pn544_fw_download_pull_high(void)
+{
+	gpio_set_value(GPIO_NFC_LOAD, 0);
+	mdelay(5);
+	gpio_set_value(GPIO_NFC_LOAD, 1);
+	mdelay(5);
+	return 0;
+}
+
+static int pn544_clock_output_ctrl(int vote)
+{
+       const char * id = "nfcp";
+	pmapp_clock_vote(id, PMAPP_CLOCK_ID_D1,
+		vote?PMAPP_CLOCK_VOTE_ON:PMAPP_CLOCK_VOTE_OFF);
+	return 0;
+}
+
+// expand func function: add close PMU output function
+// mode = 0 : close for clock pmu request mode,  mode = 1 : Set for clock pmu request mode
+static int pn544_clock_output_mode_ctrl(int mode)
+{
+       const char * id = "nfcp";
+	pmapp_clock_vote(id, PMAPP_CLOCK_ID_D1, 
+		mode?PMAPP_CLOCK_VOTE_PIN_CTRL:PMAPP_CLOCK_VOTE_OFF);
+	return 0;
+}
+
+static struct pn544_nfc_platform_data pn544_hw_data = 
+{
+	.pn544_ven_reset = pn544_ven_reset,
+	.pn544_interrupt_gpio_config = pn544_interrupt_gpio_config,
+	.pn544_fw_download_pull_down = pn544_fw_download_pull_down,
+	.pn544_fw_download_pull_high = pn544_fw_download_pull_high,
+	.pn544_clock_output_ctrl = pn544_clock_output_ctrl,
+	.pn544_clock_output_mode_ctrl = pn544_clock_output_mode_ctrl,
+};
+
+#endif
+
+
+/* Cypress cyttsp4 start */
+
+static int cyttsp4_xres(struct cyttsp4_core_platform_data *pdata,
+		struct device *dev)
+{
+	int rst_gpio = pdata->rst_gpio;
+	int rc = 0;
+
+	gpio_set_value(rst_gpio, 1);
+	msleep(20);
+	gpio_set_value(rst_gpio, 0);
+	msleep(40);
+	gpio_set_value(rst_gpio, 1);
+	msleep(20);
+	dev_info(dev,
+		"%s: RESET CYTTSP gpio=%d r=%d\n", __func__,
+		pdata->rst_gpio, rc);
+	return rc;
+}
+
+static int cyttsp4_init(struct cyttsp4_core_platform_data *pdata,
+		int on, struct device *dev)
+{
+	int rst_gpio = pdata->rst_gpio;
+	int irq_gpio = pdata->irq_gpio;
+	int rc = 0;
+
+	if (on) {
+		rc = gpio_request(rst_gpio, NULL);
+		if (rc < 0) {
+			gpio_free(rst_gpio);
+			rc = gpio_request(rst_gpio, NULL);
+		}
+		if (rc < 0) {
+			dev_err(dev,
+				"%s: Fail request gpio=%d\n", __func__,
+				rst_gpio);
+		} else {
+			rc = gpio_direction_output(rst_gpio, 1);
+			if (rc < 0) {
+				pr_err("%s: Fail set output gpio=%d\n",
+					__func__, rst_gpio);
+				gpio_free(rst_gpio);
+			} else {
+				rc = gpio_request(irq_gpio, NULL);
+				if (rc < 0) {
+					gpio_free(irq_gpio);
+					rc = gpio_request(irq_gpio,
+						NULL);
+				}
+				if (rc < 0) {
+					dev_err(dev,
+						"%s: Fail request gpio=%d\n",
+						__func__, irq_gpio);
+					gpio_free(rst_gpio);
+				} else {
+					gpio_direction_input(irq_gpio);
+				}
+			}
+		}
+	} else {
+		gpio_free(rst_gpio);
+		gpio_free(irq_gpio);
+	}
+
+	dev_info(dev,
+		"%s: INIT CYTTSP RST gpio=%d and IRQ gpio=%d r=%d\n",
+		__func__, rst_gpio, irq_gpio, rc);
+	return rc;
+}
+
+static int cyttsp4_wakeup(struct cyttsp4_core_platform_data *pdata,
+		struct device *dev, atomic_t *ignore_irq)
+{
+	int irq_gpio = pdata->irq_gpio;
+	int rc = 0;
+
+	if (ignore_irq)
+		atomic_set(ignore_irq, 1);
+	rc = gpio_direction_output(irq_gpio, 0);
+	if (rc < 0) {
+		if (ignore_irq)
+			atomic_set(ignore_irq, 0);
+		dev_err(dev,
+			"%s: Fail set output gpio=%d\n",
+			__func__, irq_gpio);
+	} else {
+		udelay(2000);
+		rc = gpio_direction_input(irq_gpio);
+		if (ignore_irq)
+			atomic_set(ignore_irq, 0);
+		if (rc < 0) {
+			dev_err(dev,
+				"%s: Fail set input gpio=%d\n",
+				__func__, irq_gpio);
+		}
+	}
+
+	dev_info(dev,
+		"%s: WAKEUP CYTTSP gpio=%d r=%d\n", __func__,
+		irq_gpio, rc);
+	return rc;
+}
+
+static int cyttsp4_sleep(struct cyttsp4_core_platform_data *pdata,
+		struct device *dev, atomic_t *ignore_irq)
+{
+	return 0;
+}
+
+static int cyttsp4_power(struct cyttsp4_core_platform_data *pdata,
+		int on, struct device *dev, atomic_t *ignore_irq)
+{
+	if (on)
+		return cyttsp4_wakeup(pdata, dev, ignore_irq);
+
+	return cyttsp4_sleep(pdata, dev, ignore_irq);
+}
+
+static int cyttsp4_irq_stat(struct cyttsp4_core_platform_data *pdata,
+		struct device *dev)
+{
+	return gpio_get_value(pdata->irq_gpio);
+}
+
+/* Button to keycode conversion */
+static u16 cyttsp4_btn_keys[] = {
+	/* use this table to map buttons to keycodes (see input.h) */
+	KEY_BACK,		/* 102 */
+	KEY_HOME,		/* 139 */
+	KEY_MENU,		/* 158 */
+	KEY_SEARCH,		/* 217 */
+	KEY_VOLUMEDOWN,		/* 114 */
+	KEY_VOLUMEUP,		/* 115 */
+	KEY_CAMERA,		/* 212 */
+	KEY_POWER		/* 116 */
+};
+
+static struct touch_settings cyttsp4_sett_btn_keys = {
+	.data = (uint8_t *)&cyttsp4_btn_keys[0],
+	.size = ARRAY_SIZE(cyttsp4_btn_keys),
+	.tag = 0,
+};
+
+static struct cyttsp4_core_platform_data _cyttsp4_core_platform_data = {
+	.irq_gpio = CYTTSP4_I2C_IRQ_GPIO,
+	.rst_gpio = CYTTSP4_I2C_RST_GPIO,
+	.xres = cyttsp4_xres,
+	.init = cyttsp4_init,
+	.power = cyttsp4_power,
+	.irq_stat = cyttsp4_irq_stat,
+	.sett = {
+		NULL,	/* Reserved */
+		NULL,	/* Command Registers */
+		NULL,	/* Touch Report */
+		NULL,	/* Cypress Data Record */
+		NULL,	/* Test Record */
+		NULL,	/* Panel Configuration Record */
+		NULL, /* &cyttsp4_sett_param_regs, */
+		NULL, /* &cyttsp4_sett_param_size, */
+		NULL,	/* Reserved */
+		NULL,	/* Reserved */
+		NULL,	/* Operational Configuration Record */
+		NULL, /* &cyttsp4_sett_ddata, *//* Design Data Record */
+		NULL, /* &cyttsp4_sett_mdata, *//* Manufacturing Data Record */
+		NULL,	/* Config and Test Registers */
+		&cyttsp4_sett_btn_keys,	/* button-to-keycode table */
+	},
+	.loader_pdata = &_cyttsp4_loader_platform_data,
+};
+
+
+static struct cyttsp4_core_info cyttsp4_core_info __initdata = {
+	.name = CYTTSP4_CORE_NAME,
+	.id = "main_ttsp_core",
+	.adap_id = CYTTSP4_I2C_NAME,
+	.platform_data = &_cyttsp4_core_platform_data,
+};
+
+
+static const uint16_t cyttsp4_abs[] = {
+	ABS_MT_POSITION_X, CY_ABS_MIN_X, CY_ABS_MAX_X, 0, 0,
+	ABS_MT_POSITION_Y, CY_ABS_MIN_Y, CY_ABS_MAX_Y, 0, 0,
+	ABS_MT_PRESSURE, CY_ABS_MIN_P, CY_ABS_MAX_P, 0, 0,
+	CY_IGNORE_VALUE, CY_ABS_MIN_W, CY_ABS_MAX_W, 0, 0,
+	ABS_MT_TRACKING_ID, CY_ABS_MIN_T, CY_ABS_MAX_T, 0, 0,
+	ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0,
+	ABS_MT_TOUCH_MINOR, 0, 255, 0, 0,
+	ABS_MT_ORIENTATION, -128, 127, 0, 0,
+};
+
+struct touch_framework cyttsp4_framework = {
+	.abs = (uint16_t *)&cyttsp4_abs[0],
+	.size = ARRAY_SIZE(cyttsp4_abs),
+	.enable_vkeys = 0,
+};
+
+static struct cyttsp4_mt_platform_data _cyttsp4_mt_platform_data = {
+	.frmwrk = &cyttsp4_framework,
+	.flags = 0x40, //0x38,
+	.inp_dev_name = CYTTSP4_MT_NAME,
+};
+
+struct cyttsp4_device_info cyttsp4_mt_info __initdata = {
+	.name = CYTTSP4_MT_NAME,
+	.core_id = "main_ttsp_core",
+	.platform_data = &_cyttsp4_mt_platform_data,
+};
+
+static struct cyttsp4_btn_platform_data _cyttsp4_btn_platform_data = {
+	.inp_dev_name = CYTTSP4_BTN_NAME,
+};
+
+struct cyttsp4_device_info cyttsp4_btn_info __initdata = {
+	.name = CYTTSP4_BTN_NAME,
+	.core_id = "main_ttsp_core",
+	.platform_data = &_cyttsp4_btn_platform_data,
+};
+
+static void  huawei_cyttsp4_init(void)
+{
+	/* Register core and devices */
+	cyttsp4_register_core_device(&cyttsp4_core_info);
+	cyttsp4_register_device(&cyttsp4_mt_info);
+	cyttsp4_register_device(&cyttsp4_btn_info);
+}
+
+
+/* Cypress cyttsp4 end */
+
+
+
+static struct i2c_board_info huawei_i2c_board_info[] __initdata = 
+{
+/* -------------------- huawei touch -------------------- */
+#ifdef CONFIG_HUAWEI_MELFAS_TOUCHSCREEN
+	{
+		I2C_BOARD_INFO("melfas-ts", 0x23),
+		.platform_data = &touch_hw_data,
+		.irq = MSM_GPIO_TO_INT(MSM_7X27A_TOUCH_INT_PIN),
+        .flags = true,   /*support multi point*/
+	},
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_RMI_TOUCH
+	{
+		I2C_BOARD_INFO("Synaptics_rmi", 0x70),
+		.platform_data = &touch_hw_data,
+		.irq = MSM_GPIO_TO_INT(MSM_7X27A_TOUCH_INT_PIN),
+        .flags = true,
+	},
+	/* synaptics IC s2000 for U8661
+	 * I2C ADDR	: 0x24
+	 */
+	{
+		I2C_BOARD_INFO("Synaptics_rmi", 0x24),
+		.platform_data = &touch_hw_data,
+		.irq = MSM_GPIO_TO_INT(MSM_7X27A_TOUCH_INT_PIN),
+        .flags = true,
+	},
+	/* only use i2c addr is 0x20 in board*/
+	{
+		I2C_BOARD_INFO("Synaptics_rmi", 0x20),
+		.platform_data = &touch_hw_data,
+		.irq = MSM_GPIO_TO_INT(MSM_7X27A_TOUCH_INT_PIN),
+        .flags = true,
+	},
+#endif
+
+#ifdef CONFIG_HUAWEI_GT968_TOUCHSCREEN
+    {
+        I2C_BOARD_INFO("Goodix-TS", 0x5d),
+		.platform_data = &touch_hw_data,
+		.irq = MSM_GPIO_TO_INT(MSM_7X27A_TOUCH_INT_PIN),
+        .flags = true,
+    },
+#endif
+	{
+		I2C_BOARD_INFO(CYTTSP4_I2C_NAME, CYTTSP4_I2C_TCH_ADR),
+		.irq = MSM_GPIO_TO_INT( CYTTSP4_I2C_IRQ_GPIO),
+		.platform_data = CYTTSP4_I2C_NAME,
+	},
+
+/* -------------------- huawei keypad -------------------- */
+#ifdef CONFIG_QWERTY_KEYPAD_ADP5587
+	{
+		I2C_BOARD_INFO("adp5587", 0x34),
+		.irq = MSM_GPIO_TO_INT(40)
+	},
+#endif 
+
+/* -------------------- huawei sensors -------------------- */
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_ADI_ADXL346
+    {
+        I2C_BOARD_INFO("gs_adi346", 0xA8>>1),  /* actual address 0xA6, fake address 0xA8*/
+	     .platform_data = &gs_adi346_platform_data,
+        .irq = MSM_GPIO_TO_INT(19)    //MEMS_INT1
+    },
+#endif 
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_KXTIK1004
+	{ 
+	    I2C_BOARD_INFO("gs_kxtik", 0x1E >> 1),  /* actual address 0x0F*/
+	    .platform_data = &gs_kxtik_platform_data,
+	    .irq = MSM_GPIO_TO_INT(19)     //MEMS_INT1
+	},
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_MMA8452
+    {
+        I2C_BOARD_INFO("gs_mma8452", 0x38 >> 1),
+        .platform_data = &gs_mma8452_platform_data,
+        .irq = MSM_GPIO_TO_INT(19)    //MEMS_INT1
+    },
+#endif	
+
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_ACCELEROMETER_ST_LIS3XH
+    {
+        I2C_BOARD_INFO("gs_st_lis3xh", 0x30 >> 1),
+	 .platform_data = &gs_st_lis3xh_platform_data,
+        .irq = MSM_GPIO_TO_INT(19)    //MEMS_INT1
+    },
+#endif
+
+/*fack address,because IIC is interrupt with bluetooth*/
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_AK8975
+    {
+        I2C_BOARD_INFO("akm8975", 0x0D),//7 bit addr, no write bit
+        .irq = MSM_GPIO_TO_INT(18)
+    },
+#endif 
+
+#ifdef CONFIG_HUAWEI_FEATURE_SENSORS_AK8963
+    {
+        I2C_BOARD_INFO("akm8963", 0x0E),//7 bit addr, no write bit
+        .irq = MSM_GPIO_TO_INT(18)
+    },
+#endif 
+
+#ifdef CONFIG_HUAWEI_FEATURE_PROXIMITY_EVERLIGHT_APS_12D
+	{   
+		I2C_BOARD_INFO("aps-12d", 0x88 >> 1),  
+	},
+#endif
+
+#ifdef CONFIG_HUAWEI_FEATURE_PROXIMITY_EVERLIGHT_APS_9900
+	{   
+		I2C_BOARD_INFO("aps-9900", 0x39),
+	    .irq = MSM_GPIO_TO_INT(MSM_7X27A_APS9900_INT),
+        .platform_data = &aps9900_hw_data,
+	},
+#endif
+
+/* -------------------- huawei camera flash -------------------- */
+/*Register i2c information for flash tps61310*/
+#ifdef CONFIG_HUAWEI_FEATURE_TPS61310
+	{
+		I2C_BOARD_INFO("tps61310" , 0x33),
+	},
+#endif
+
+/*Add new i2c information for flash lm3642*/
+#ifdef CONFIG_HUAWEI_FEATURE_LM3642
+	{
+		I2C_BOARD_INFO("lm3642" , 0x63),
+	},
+#endif
+
+/* -------------------- huawei nfc -------------------- */
+#ifdef CONFIG_HUAWEI_NFC_PN544
+	{
+		I2C_BOARD_INFO(PN544_DRIVER_NAME, PN544_I2C_ADDR),
+		.irq = MSM_GPIO_TO_INT(GPIO_NFC_INT),
+		.platform_data = &pn544_hw_data,
+	},
+#endif
+};
+
 static struct i2c_board_info mxt_device_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("atmel_mxt_ts", 0x4a),
@@ -502,6 +1415,7 @@ static int synaptics_touchpad_setup(void)
 }
 #endif
 
+#ifndef CONFIG_HUAWEI_KERNEL /*added by lishubin update to 1215*/
 static struct regulator_bulk_data regs_atmel[] = {
 	{ .supply = "ldo12", .min_uV = 2700000, .max_uV = 3300000 },
 	{ .supply = "smps3", .min_uV = 1800000, .max_uV = 1800000 },
@@ -623,6 +1537,7 @@ static struct i2c_board_info atmel_ts_i2c_info[] __initdata = {
 		.irq = MSM_GPIO_TO_INT(ATMEL_TS_GPIO_IRQ),
 	},
 };
+#endif /*added by lishubin update to 1215*/
 
 static struct msm_handset_platform_data hs_platform_data = {
 	.hs_name = "7k_handset",
@@ -868,6 +1783,7 @@ static struct platform_device tricolor_leds_pdev = {
 void __init msm7627a_add_io_devices(void)
 {
 	/* touchscreen */
+#ifndef CONFIG_HUAWEI_KERNEL
 	if (machine_is_msm7625a_surf() || machine_is_msm7625a_ffa()) {
 		atmel_ts_pdata.min_x = 0;
 		atmel_ts_pdata.max_x = 480;
@@ -878,9 +1794,18 @@ void __init msm7627a_add_io_devices(void)
 	i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
 				atmel_ts_i2c_info,
 				ARRAY_SIZE(atmel_ts_i2c_info));
+#else
+	i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID, 
+		huawei_i2c_board_info,
+		ARRAY_SIZE(huawei_i2c_board_info));
+#endif
+
+#ifndef CONFIG_HUAWEI_GPIO_KEYPAD
 	/* keypad */
 	platform_device_register(&kp_pdev);
-
+#else
+	platform_device_register(&keypad_device_default);
+#endif
 	/* headset */
 	platform_device_register(&hs_pdev);
 
@@ -894,9 +1819,12 @@ void __init msm7627a_add_io_devices(void)
 		platform_device_register(&led_pdev);
 
 	/* Vibrator */
+#ifndef CONFIG_HUAWEI_KERNEL
 	if (machine_is_msm7x27a_ffa() || machine_is_msm7625a_ffa()
 					|| machine_is_msm8625_ffa())
+#endif
 		msm_init_pmic_vibrator();
+	huawei_cyttsp4_init();
 }
 
 void __init qrd7627a_add_io_devices(void)

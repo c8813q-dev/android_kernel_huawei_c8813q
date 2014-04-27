@@ -14,6 +14,13 @@
 #include <linux/mmc/core.h>
 #include <linux/mod_devicetable.h>
 
+#ifdef CONFIG_HUAWEI_KERNEL
+#define EMMC_SANDISK_MANFID 0x45
+#define EMMC_HYNIX_MANFID 0x90
+#define EMMC_SAMSUNG_MANFID 0x15
+#define EMMC_TOSHIBA_MANFID 0x11
+#endif
+
 struct mmc_cid {
 	unsigned int		manfid;
 	char			prod_name[8];
@@ -310,6 +317,10 @@ struct mmc_card {
 						/* byte mode */
 #define MMC_QUIRK_INAND_DATA_TIMEOUT  (1<<8)    /* For incorrect data timeout */
 
+#ifdef CONFIG_HUAWEI_KERNEL 
+#define MMC_QUIRK_SAMSUNG_SMART (1<<10)          /* Samsung SMART is available */ 
+#endif
+
 	unsigned int		erase_size;	/* erase size in sectors */
  	unsigned int		erase_shift;	/* if erase unit is power 2 */
  	unsigned int		pref_erase;	/* in sectors */
@@ -573,5 +584,7 @@ extern void mmc_fixup_device(struct mmc_card *card,
 extern struct mmc_wr_pack_stats *mmc_blk_get_packed_statistics(
 			struct mmc_card *card);
 extern void mmc_blk_init_packed_statistics(struct mmc_card *card);
-
-#endif /* LINUX_MMC_CARD_H */
+#ifdef CONFIG_HUAWEI_KERNEL 
+extern ssize_t mmc_samsung_smart_handle(struct mmc_card *card, char *buf); 
+#endif
+#endif

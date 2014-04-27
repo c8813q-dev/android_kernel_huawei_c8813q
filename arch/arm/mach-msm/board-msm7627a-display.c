@@ -26,7 +26,7 @@
 #include <mach/rpc_pmapp.h>
 #include "devices.h"
 #include "board-msm7627a.h"
-
+#include <linux/hardware_self_adapt.h>
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_SIZE		0x4BF000
 #define MSM7x25A_MSM_FB_SIZE    0x1C2000
@@ -803,9 +803,10 @@ static struct platform_device *skud_fb_devices[] __initdata = {
 
 void __init msm_msm7627a_allocate_memory_regions(void)
 {
+	/*Add 4 framebuffer and delete the mem adapter strategy*/	
 	void *addr;
 	unsigned long fb_size;
-
+#ifndef CONFIG_HUAWEI_KERNEL
 	if (machine_is_msm7625a_surf() || machine_is_msm7625a_ffa())
 		fb_size = MSM7x25A_MSM_FB_SIZE;
 	else if (machine_is_msm7627a_evb() || machine_is_msm8625_evb()
@@ -816,7 +817,9 @@ void __init msm_msm7627a_allocate_memory_regions(void)
 		fb_size = MSM8x25Q_MSM_FB_SIZE;
 	else
 		fb_size = MSM_FB_SIZE;
-
+#else
+	fb_size = get_framebuffer_size();
+#endif
 	addr = alloc_bootmem_align(fb_size, 0x1000);
 	msm_fb_resources[0].start = __pa(addr);
 	msm_fb_resources[0].end = msm_fb_resources[0].start + fb_size - 1;
@@ -850,7 +853,8 @@ static char lcdc_splash_is_enabled()
 #define GPIO_LCDC_BRDG_RESET_N	129
 #define GPIO_LCD_DSI_SEL	125
 #define LCDC_RESET_PHYS		0x90008014
-
+/* We needn't go with this patch,with the same as G verson */
+#ifndef CONFIG_HUAWEI_KERNEL
 static  void __iomem *lcdc_reset_ptr;
 
 static unsigned mipi_dsi_gpio[] = {
@@ -864,7 +868,7 @@ static unsigned lcd_dsi_sel_gpio[] = {
 	GPIO_CFG(GPIO_LCD_DSI_SEL, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP,
 			GPIO_CFG_2MA),
 };
-
+#endif
 enum {
 	DSI_SINGLE_LANE = 1,
 	DSI_TWO_LANES,
@@ -883,6 +887,8 @@ static int msm_fb_get_lane_config(void)
 	return rc;
 }
 
+/* We needn't go with this patch,with the same as G verson */
+#ifndef CONFIG_HUAWEI_KERNEL
 static int msm_fb_dsi_client_msm_reset(void)
 {
 	int rc = 0;
@@ -1235,6 +1241,7 @@ static int mipi_dsi_panel_qrd1_power(int on)
 static int qrd3_dsi_gpio_initialized;
 static struct regulator *gpio_reg_2p85v, *gpio_reg_1p8v;
 
+/*patch from Qualcomm*/
 static int mipi_dsi_panel_qrd3_power(int on)
 {
 	int rc = 0;
@@ -1519,7 +1526,30 @@ static int mipi_dsi_panel_power(int on)
 		rc = mipi_dsi_panel_msm_power(on);
 	return rc;
 }
+#else
+/*copy some var or func declare to solve compile problem*/
+static char mipi_dsi_splash_is_enabled(void);
+static struct regulator *gpio_reg_2p85v, *gpio_reg_1p8v;
 
+static int dsi_gpio_initialized;
+static int msm_fb_dsi_client_reset(void)
+{
+	return 0;
+}
+
+static int mipi_dsi_panel_power(int on)
+{
+	if (!dsi_gpio_initialized) {	
+		if (get_hw_lcd_ctrl_bl_type() == CTRL_BL_BY_MSM)
+		{
+			pmapp_disp_backlight_init();
+		}
+		
+		dsi_gpio_initialized = 1;
+	}
+	return 0;
+}
+#endif
 #define MDP_303_VSYNC_GPIO 97
 
 static struct mipi_dsi_platform_data mipi_dsi_pdata = {
@@ -1528,7 +1558,7 @@ static struct mipi_dsi_platform_data mipi_dsi_pdata = {
 	.dsi_client_reset       = msm_fb_dsi_client_reset,
 	.get_lane_config	= msm_fb_get_lane_config,
 	.splash_is_enabled	= mipi_dsi_splash_is_enabled,
-	.dlane_swap		= 0x1,
+	.dlane_swap		= 0x0,
 };
 
 static char mipi_dsi_splash_is_enabled(void)
@@ -1589,6 +1619,7 @@ void __init msm_fb_add_devices(void)
 		if (disable_splash)
 			mdp_pdata.cont_splash_enabled = 0x0;
 
+
 		platform_add_devices(evb_fb_devices,
 				ARRAY_SIZE(evb_fb_devices));
 	} else if (machine_is_msm7627a_qrd3() || machine_is_msm8625_qrd7()) {
@@ -1603,7 +1634,15 @@ void __init msm_fb_add_devices(void)
 		platform_add_devices(skud_fb_devices,
 				ARRAY_SIZE(skud_fb_devices));
 	} else {
-		mdp_pdata.cont_splash_enabled = 0x0;
+		/* mipi video mode need setting for support continuous splash */
+		if (get_hw_lcd_interface_type() == LCD_IS_MIPI_VIDEO)
+		{
+			mdp_pdata.cont_splash_enabled = 0x1;
+		}
+		else
+		{
+			mdp_pdata.cont_splash_enabled = 0x0;
+		}
 		platform_add_devices(msm_fb_devices,
 				ARRAY_SIZE(msm_fb_devices));
 	}

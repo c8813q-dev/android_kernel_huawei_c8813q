@@ -122,6 +122,7 @@ obj-$(CONFIG_MPILIB) += mpi/
 obj-$(CONFIG_SIGNATURE) += digsig.o
 
 obj-$(CONFIG_CLZ_TAB) += clz_tab.o
+obj-$(CONFIG_DEVICE_CHECK) += dev_check.o
 
 obj-$(CONFIG_QMI_ENCDEC) += qmi_encdec.o
 

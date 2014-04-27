@@ -54,6 +54,14 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
+#ifdef CONFIG_HUAWEI_KERNEL_DEBUG
+#define DBG(format, arg...) do { \
+    printk(KERN_DEBUG "%s: " format "\n" , __func__ , ## arg); \
+} while (0)
+#else
+#define DBG(format, arg...) do { } while (0)
+#endif
+
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a,b)	(-EINVAL)
 #endif
@@ -116,6 +124,9 @@ EXPORT_SYMBOL(fs_overflowgid);
 int C_A_D = 1;
 struct pid *cad_pid;
 EXPORT_SYMBOL(cad_pid);
+
+/* power key detect solution for ANR */
+void del_power_key_timer(void);
 
 /*
  * If set, this is used for preparing the system to power off.
@@ -299,6 +310,10 @@ out_unlock:
 	return retval;
 }
 
+
+/* delete 12 lines */
+
+
 /**
  *	emergency_restart - reboot the system
  *
@@ -309,6 +324,8 @@ out_unlock:
  */
 void emergency_restart(void)
 {
+/* delete 9 lines */
+
 	kmsg_dump(KMSG_DUMP_EMERG);
 	machine_emergency_restart();
 }
@@ -353,6 +370,8 @@ int unregister_reboot_notifier(struct notifier_block *nb)
 	return blocking_notifier_chain_unregister(&reboot_notifier_list, nb);
 }
 EXPORT_SYMBOL(unregister_reboot_notifier);
+
+/* delete 37 lines */
 
 /**
  *	kernel_restart - reboot the system
@@ -405,14 +424,27 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  */
 void kernel_power_off(void)
 {
+    DBG("begin");
+    
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
+
+    DBG("kernel_shutdown_prepare complete");
+    
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();
+
+    DBG("before  disable_nonboot_cpus");
+    
 	disable_nonboot_cpus();
+
+    DBG("disable_nonboot_cpus complete");
+    
 	syscore_shutdown();
 	printk(KERN_EMERG "Power down.\n");
 	kmsg_dump(KMSG_DUMP_POWEROFF);
 	machine_power_off();
+
+    DBG("end");
 }
 EXPORT_SYMBOL_GPL(kernel_power_off);
 
@@ -431,6 +463,12 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 {
 	char buffer[256];
 	int ret = 0;
+
+    /* power key detect solution for ANR */
+    del_power_key_timer();
+
+
+    DBG("SYSCALL_DEFINE4  power off debug begin");
 
 	/* We only trust the superuser with rebooting the system. */
 	if (!capable(CAP_SYS_BOOT))
@@ -479,6 +517,7 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		panic("cannot halt");
 
 	case LINUX_REBOOT_CMD_POWER_OFF:
+        DBG("case LINUX_REBOOT_CMD_POWER_OFF");
 		kernel_power_off();
 		do_exit(0);
 		break;
@@ -510,6 +549,9 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		break;
 	}
 	mutex_unlock(&reboot_mutex);
+
+    DBG("end");
+    
 	return ret;
 }
 
@@ -1179,6 +1221,8 @@ DECLARE_RWSEM(uts_sem);
  * Work around broken programs that cannot handle "Linux 3.0".
  * Instead we map 3.x to 2.6.40+x, so e.g. 3.0 would be 2.6.40
  */
+
+/* google 2013-02 security patch */
 static int override_release(char __user *release, size_t len)
 {
 	int ret = 0;

@@ -16,38 +16,62 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/leds.h>
+/* Delete some lines we never use in future */
 
 #include <mach/pmic.h>
+#include <mach/rpc_pmapp.h>
 
+
+#include <linux/module.h>
+#ifdef CONFIG_HUAWEI_LEDS_PMIC
+
+#include <linux/hardware_self_adapt.h>
+#include <asm/mach-types.h>
+#endif
 #define MAX_KEYPAD_BL_LEVEL	16
+
 
 static void msm_keypad_bl_led_set(struct led_classdev *led_cdev,
 	enum led_brightness value)
 {
+#ifdef CONFIG_HUAWEI_LEDS_PMIC
+    int ret = 0;
+    pmapp_button_backlight_init();
+
+    ret = pmapp_button_backlight_set_brightness(value);
+    if (ret)
+		dev_err(led_cdev->dev, "can't set keypad backlight\n");
+#else
 	int ret;
 
 	ret = pmic_set_led_intensity(LED_KEYPAD, value / MAX_KEYPAD_BL_LEVEL);
 	if (ret)
 		dev_err(led_cdev->dev, "can't set keypad backlight\n");
+#endif
 }
 
 static struct led_classdev msm_kp_bl_led = {
+#ifdef CONFIG_HUAWEI_LEDS_PMIC
+	.name			= "button-backlight",
+#else
 	.name			= "keyboard-backlight",
+#endif
 	.brightness_set		= msm_keypad_bl_led_set,
 	.brightness		= LED_OFF,
 };
 
 static int msm_pmic_led_probe(struct platform_device *pdev)
 {
-	int rc;
+    int rc;
 
-	rc = led_classdev_register(&pdev->dev, &msm_kp_bl_led);
-	if (rc) {
-		dev_err(&pdev->dev, "unable to register led class driver\n");
-		return rc;
-	}
-	msm_keypad_bl_led_set(&msm_kp_bl_led, LED_OFF);
+    rc = led_classdev_register(&pdev->dev, &msm_kp_bl_led);
+    if (rc) {
+	dev_err(&pdev->dev, "unable to register led class driver\n");
 	return rc;
+	}
+    pmapp_button_backlight_init();
+    msm_keypad_bl_led_set(&msm_kp_bl_led, LED_OFF);
+    return rc;
 }
 
 static int __devexit msm_pmic_led_remove(struct platform_device *pdev)
@@ -61,17 +85,18 @@ static int __devexit msm_pmic_led_remove(struct platform_device *pdev)
 static int msm_pmic_led_suspend(struct platform_device *dev,
 		pm_message_t state)
 {
-	led_classdev_suspend(&msm_kp_bl_led);
+    led_classdev_suspend(&msm_kp_bl_led);
 
-	return 0;
+    return 0;
 }
 
 static int msm_pmic_led_resume(struct platform_device *dev)
 {
-	led_classdev_resume(&msm_kp_bl_led);
+    led_classdev_resume(&msm_kp_bl_led);
 
-	return 0;
+    return 0;
 }
+
 #else
 #define msm_pmic_led_suspend NULL
 #define msm_pmic_led_resume NULL

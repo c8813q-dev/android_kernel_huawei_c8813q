@@ -215,6 +215,16 @@ config REGULATOR_ONSEMI_NCP6335D
 	 and supports a programmable voltage range from 0.6V to 1.4V in steps
 	 of 6.25mV.
 
+config REGULATOR_FAIRCHILD_FAN53555
+	tristate "Fairchild FAN53555 regulator support"
+	depends on I2C
+	default n
+	help
+	 This driver supports the Fairchild FAN53555 switching voltage regulator
+	 (buck convertor). The regulator is controlled using an I2C interface
+	 and supports a programmable voltage range from 0.603V to 1.411V in steps
+	 of 12.826mV.
+
 config REGULATOR_PCAP
 	tristate "Motorola PCAP2 regulator driver"
 	depends on EZX_PCAP

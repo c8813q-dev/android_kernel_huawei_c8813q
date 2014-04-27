@@ -1115,9 +1115,10 @@ int msm_adsp_enable(struct msm_adsp_module *module)
 			break;
 		module->state = ADSP_STATE_ENABLING;
 		mutex_unlock(&module->lock);
+        /* timeout value change from 1s to 3s */
 		rc = wait_event_timeout(module->state_wait,
 					module->state != ADSP_STATE_ENABLING,
-					1 * HZ);
+					3 * HZ);
 		mutex_lock(&module->lock);
 		if (module->state == ADSP_STATE_ENABLED) {
 			rc = 0;

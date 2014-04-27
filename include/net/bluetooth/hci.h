@@ -21,6 +21,7 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 */
+// rollback to original BlueZ
 
 #ifndef __HCI_H
 #define __HCI_H
@@ -706,12 +707,6 @@ struct hci_cp_write_voice_setting {
 	__le16   voice_setting;
 } __packed;
 
-#define HCI_OP_WRITE_AUTOMATIC_FLUSH_TIMEOUT	0x0c28
-struct hci_cp_write_automatic_flush_timeout {
-	__le16   handle;
-	__le16   timeout;
-} __packed;
-
 #define HCI_OP_HOST_BUFFER_SIZE		0x0c33
 struct hci_cp_host_buffer_size {
 	__le16   acl_mtu;
@@ -873,17 +868,6 @@ struct hci_rp_read_data_block_size {
 	__le16   max_acl_len;
 	__le16   data_block_len;
 	__le16   num_blocks;
-} __packed;
-
-#define HCI_OP_READ_RSSI	0x1405
-struct hci_cp_read_rssi {
-	__le16   handle;
-} __packed;
-
-struct hci_rp_read_rssi {
-	__u8     status;
-	__le16   handle;
-	__s8     rssi;
 } __packed;
 
 #define HCI_OP_READ_LOCAL_AMP_INFO	0x1409

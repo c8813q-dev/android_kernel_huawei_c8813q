@@ -62,6 +62,13 @@ config ARCH_MSM7X30
 	select HOLES_IN_ZONE if SPARSEMEM
 	select MSM_MODEM_RESTART
 
+#huawei modify
+config HUAWEI_MSM_VIBRATOR
+	tristate "Huawei 7x30 vibrator"	
+	default n
+	help
+	  if Y ,select HUAWEI_MSM_VIBRATOR  
+
 config ARCH_QSD8X50
 	bool "QSD8X50"
 	select ARCH_MSM_SCORPION
@@ -354,6 +361,7 @@ config ARCH_MSM8625
 	select MSM_RUN_QUEUE_STATS
 	select MIGHT_HAVE_CACHE_L2X0
 	select ARM_HAS_SG_CHAIN
+	select DONT_MAP_HOLE_AFTER_MEMBANK0
 
 config ARCH_MSM9625
 	bool "MSM9625"
@@ -958,6 +966,67 @@ config MACH_FSM9XXX_SURF
 config MACH_MSM_DUMMY
 	bool "NONE (No device)"
 
+config  HUAWEI_KERNEL
+	bool "HUAWEI Product"
+	depends on ARCH_MSM7X27A
+	default n
+	help
+	  Support for the HUAWEI board.
+	  
+config FRAMEBUF_SELF_ADAPT
+	tristate "Huawei framebuffer self adapt"	
+	depends on HUAWEI_KERNEL
+	default n
+	help
+	  if Y ,select FRAMEBUF_SELF_ADAPT  
+
+config MACH_MSM8X25_U8951
+	depends on ARCH_MSM8625
+	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "MSM8X25_U8951 SURF"
+	help
+	  Support for the HUAWEI 8x25 U8951 board.
+	  
+config MACH_MSM8X25_G520U
+	depends on ARCH_MSM8625
+	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "MSM8X25_G520U SURF"
+	help
+	  Support for the HUAWEI 8x25 G520U board.
+
+config MACH_MSM8X25_C8813Q
+	depends on ARCH_MSM8625
+	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "MSM8X25_C8813Q SURF"
+	help
+	  Support for the HUAWEI 8x25 C8813Q board.	
+
+config MACH_MSM8X25_G610C
+	depends on ARCH_MSM8625
+	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "MSM8X25_G610C SURF"
+	help
+	  Support for the HUAWEI 8x25 G610C board.	
+
+config MACH_MSM8X25_C8950D
+	depends on ARCH_MSM8625
+	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "MSM8X25_C8950D SURF"
+	help
+	  Support for the HUAWEI 8x25 C8950D board.	  
+config MACH_MSM8X25_C8813
+	depends on ARCH_MSM8625
+	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "MSM8X25_C8813 SURF"
+	help
+	  Support for the HUAWEI 8x25 C8813 board.
+
 endmenu
 
 source "arch/arm/mach-msm/lge/Kconfig"
@@ -1087,6 +1156,7 @@ choice
 		  Say Y here if you want the debug print routines to direct
 		  their output to the serial port on MSM 8660 devices.
 
+	#fix recursive dependency detected!
 	config DEBUG_MSM8960_UART
 		bool "Kernel low-level debugging messages via MSM 8960 UART"
 		depends on ARCH_MSM8960 && DEBUG_LL
@@ -2722,3 +2792,78 @@ config MSM_PBUS
 	  client address which caused PBUS hang and PBUS
 	  master information at the time of hang.
 endif
+
+config HUAWEI_GPIO_KEYPAD
+	bool "MSM HUAWEI GPIO keypad"
+	depends on INPUT_GPIO = "y"
+	default n
+	help
+	  Select if the GPIO keypad is attached.
+
+config HUAWEI_FEATURE_VIBRATOR
+	depends on HUAWEI_KERNEL
+	tristate "Huawei 8800 vibrator"	
+	default n
+	help
+	  if Y ,select HUAWEI_FEATURE_VIBRATOR 
+
+config HUAWEI_SETTING_TIMER_FOR_VIBRATOR_OFF
+	depends on HUAWEI_FEATURE_VIBRATOR
+	tristate "Huawei stop vibratting with timer"	
+	default n
+	help
+	  if Y ,select HUAWEI_SETTING_TIMER_FOR_VIBRATOR_OFF 
+
+config HUAWEI_U8800PP1_WIFI_LOW_CONSUME
+	depends on MACH_MSM7X30_U8800
+	tristate "Huawei config wifi for low consume at PP1 version"	
+	default y
+	help
+	  if Y ,select HUAWEI_U8800PP1_CONFIG_WIFI_LOW_CONSUME 
+
+config  HUAWEI_FEATURE_OEMINFO
+	depends on HUAWEI_KERNEL
+	default y
+	tristate "OEMINFO"
+
+config HUAWEI_MTK6252_MODEM
+	depends on HUAWEI_KERNEL
+	tristate "mtk6252 modem"
+	default n
+	help
+	  Support mtk6252 as modem.
+
+config HUAWEI_POWER_DOWN_CHARGE
+	default y
+	tristate "huawei_power_down_charge"
+	help
+	  Say Y here if you want to support huawei_power_down_charge.
+
+config HUAWEI_RPC_CRASH_DEBUG
+	bool "HUAWEI rpc crash debug"
+        select OPROFILE
+	depends on HUAWEI_KERNEL
+	default n
+	help
+	  Select Y if use rpc related logs.
+
+config HUAWEI_KEY_TEST
+	bool "HUAWEI auto key test driver"
+	depends on HUAWEI_KERNEL
+	default y
+	help
+	  Select Y if use auto key test.
+
+config HUAWEI_SMEM_SLEEP_LOG
+	bool "HUAWEI smem sleep log driver"
+	depends on HUAWEI_KERNEL
+	default n
+	help
+	  Select Y if use smem sleep log driver.
+
+config HUAWEI_KERNEL_DEBUG
+	bool "HUAWEI kernel debug"
+	depends on HUAWEI_KERNEL
+	default n
+	help
+	  Select Y if print HUAWEI log

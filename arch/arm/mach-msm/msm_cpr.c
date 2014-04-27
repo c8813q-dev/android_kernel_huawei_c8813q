@@ -38,6 +38,25 @@
 #include "msm_cpr.h"
 #include "pm.h"
 
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <asm-arm/huawei/smem_vendor_huawei.h>
+#include "smd_private.h"
+typedef enum 
+{
+    ACPU_NCP6335D_DC = 1,
+	ACPU_FAN5355504X_DC = 2,
+    ACPU_INVALID_DC = 0
+} acpu_dc_name_type;
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <linux/regulator/driver.h>
+#define REGULATOR_DC_FAN53555 "fan53555"
+#define REGULATOR_DC_NCP6335D "ncp6335d"
+#define STEP_VOLTAGE_FAN53555 12826
+#define STEP_VOLTAGE_NCP6335D 6250
+#endif
+
 #define MODULE_NAME "msm-cpr"
 
 /**
@@ -70,6 +89,12 @@ MODULE_PARM_DESC(enable, "CPR Enable");
 MODULE_PARM_DESC(nom_Vmin, "Nominal VMin");
 MODULE_PARM_DESC(turbo_Vmin, "Turbo VMin");
 MODULE_PARM_DESC(max_quot, "Max Quot");
+
+#ifdef CONFIG_HUAWEI_KERNEL
+extern struct regulator *cpu_core_voltage_handle;
+#else
+extern struct regulator *ncp6335d_handle;
+#endif
 
 extern struct regulator *ext_vreg_handle;
 
@@ -949,7 +974,10 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 	struct resource *mem;
 	struct msm_cpr_mode *chip_data;
 	uint32_t curr_volt, new_volt;
-
+#ifdef CONFIG_HUAWEI_KERNEL
+    smem_huawei_vender *smem_huawei_para_ptr = NULL;
+    acpu_dc_name_type acpu_dc_info = ACPU_INVALID_DC;
+#endif
 	if (!enable)
 		return -EPERM;
 
@@ -1034,16 +1062,43 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 	spin_lock_init(&cpr->cpr_lock);
 
 	/* Initialize the Voltage domain for CPR */
-	if (ext_vreg_handle == NULL)
-		cpr->vreg_cx = regulator_get(&pdev->dev, "vddx_cx");
-	else
-		cpr->vreg_cx = ext_vreg_handle;
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	cpr->vreg_cx = cpu_core_voltage_handle;
+#else
+	if(ncp6335d_handle == NULL)
+	  cpr->vreg_cx = regulator_get(&pdev->dev, "vddx_cx");
+        else
+	  cpr->vreg_cx = ncp6335d_handle;
+#endif
 
 	if (IS_ERR(cpr->vreg_cx)) {
 		res = PTR_ERR(cpr->vreg_cx);
 		pr_err("could not get regulator: %d\n", res);
 		goto err_reg_get;
 	}
+	
+#ifdef CONFIG_HUAWEI_KERNEL
+    /* Use regulator name to adapt different dcdc chip automatically. */
+    if (0 == strcmp(REGULATOR_DC_FAN53555, regulator_get_name(cpr->vreg_cx)))
+    {
+	    cpr->step_size = STEP_VOLTAGE_FAN53555;
+        acpu_dc_info = ACPU_FAN5355504X_DC;
+    }
+	else if(0 == strcmp(REGULATOR_DC_NCP6335D, regulator_get_name(cpr->vreg_cx)))
+	{
+		cpr->step_size = STEP_VOLTAGE_NCP6335D;
+        acpu_dc_info = ACPU_NCP6335D_DC;
+	}
+	/* Send DC chip info to amss with share memory VENDOR0. */
+	smem_huawei_para_ptr = (smem_huawei_vender*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_huawei_vender));
+    if (!smem_huawei_para_ptr)
+    {
+        pr_err("%s: fan53555 Can't find SMEM \n", __func__);
+    }
+    smem_huawei_para_ptr->dc_chip_type = acpu_dc_info;
+	printk("(msm_cpr_probe) dc_name: <%s>, step_size=%d\n", regulator_get_name(cpr->vreg_cx), cpr->step_size);
+#endif
 
 	/*
 	 * Calculate the step size by adding 1mV to the current voltage.

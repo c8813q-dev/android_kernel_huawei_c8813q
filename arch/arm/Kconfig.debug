@@ -2,6 +2,30 @@ menu "Kernel hacking"
 
 source "lib/Kconfig.debug"
 
+config SUPPORT_SYSTEMTAP
+	bool "Enable Systemtap support"
+	select FRAME_POINTER if !THUMB2_KERNEL
+	select TRACEPOINTS
+	select KPROBES
+	select RELAY
+	select PROFILING
+	select DEBUG_FS
+	select DEBUG_INFO
+	help
+	  This option enables systemtap support.
+	  Select FRAME_POINTER if !THUMB2_KERNEL, TRACEPOINTS, KPROBES, RELAY, PROFILING, DEBUG_FS, DEBUG_INFO
+
+config SRECORDER_MSM
+	bool "Enable Reserve 1M memory in MSM platform"
+	default y
+	help
+	   Reserve 1M memory for Srecorder in MSM platform
+#/* delete 6 lines */
+config DEVICE_CHECK
+	bool "Enable Device Check for FreezeScreem"
+	default y
+	help
+	   Device Check for FreezeScreem
 config STRICT_DEVMEM
 	bool "Filter access to /dev/mem"
 	depends on MMU

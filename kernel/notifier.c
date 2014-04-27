@@ -13,6 +13,8 @@
  */
 BLOCKING_NOTIFIER_HEAD(reboot_notifier_list);
 
+/* delete 10 lines */
+
 /*
  *	Notifier chain core routines.  The exported routines below
  *	are layered on top of these, with appropriate locking added.

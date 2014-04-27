@@ -581,6 +581,10 @@ struct kgsl_pagetable *kgsl_mmu_getpagetable(unsigned long name)
 	if (!kgsl_mmu_is_perprocess())
 		name = KGSL_MMU_GLOBAL_PT;
 
+#ifndef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
+	if (!(cpu_is_msm8625q() && (get_ddr_size() > SZ_512M)))
+		name = KGSL_MMU_GLOBAL_PT;
+#endif
 	pt = kgsl_get_pagetable(name);
 
 	if (pt == NULL)

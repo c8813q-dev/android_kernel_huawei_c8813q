@@ -490,7 +490,7 @@ static void msm_pm_config_hw_before_power_down(void)
 	__raw_writel(1, APPS_PWRDOWN);
 	mb();
 }
-
+#ifdef CONFIG_HAVE_ARM_SCU
 /*
  * Program the top csr from core0 context to put the
  * core1 into GDFS, as core1 is not running yet.
@@ -565,6 +565,7 @@ static void msm_pm_configure_top_csr(void)
 
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x13;
 }
+#endif
 
 /*
  * Clear hardware registers after Apps powers up.
@@ -587,10 +588,12 @@ static void msm_pm_config_hw_after_power_up(void)
 			 * enable the SCU while coming out of power
 			 * collapse.
 			 */
+			#ifdef CONFIG_HAVE_ARM_SCU
 			scu_enable(MSM_SCU_BASE);
 			/*
 			 * Program the top csr to put the core1 into GDFS.
 			 */
+			#endif
 			msm_pm_configure_top_csr();
 		}
 	} else {
@@ -884,10 +887,11 @@ static int msm_pm_power_collapse
 	int modem_early_exit = 0;
 
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x1;
-	/* This location tell us we are doing a PC */
+
+	/* this location tell us we are doing a PC */
 	*(uint32_t *)(virt_start_ptr + 0x34) = 0x1;
 
-	/* This location tell us what PC we are doing
+	/* this location tell us what PC we are doing
 	 * i.e. idle/suspend
 	 * idlePC	--> 0x2
 	 * suspendPC	--> 0x1
@@ -1049,6 +1053,7 @@ static int msm_pm_power_collapse
 						continue;
 					per_cpu(power_collapsed, cpu) = 1;
 				}
+
 				/*
 				 * override DBGNOPOWERDN and program the GDFS
 				 * count val
@@ -1064,6 +1069,7 @@ static int msm_pm_power_collapse
 						continue;
 					per_cpu(power_collapsed, cpu) = 1;
 				}
+
 				/*
 				 * override DBGNOPOWERDN and program the GDFS
 				 * count val

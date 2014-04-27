@@ -31,6 +31,8 @@ struct msm_camera_i2c_client {
 	struct i2c_client *client;
 	struct msm_camera_cci_client *cci_client;
 	enum msm_camera_i2c_reg_addr_type addr_type;
+	int addr_pos; //bits of i2c addr moved
+	int addr_dir; //direction of i2c addr moving, -1 for right, +1 for left, 0 for no move
 };
 
 struct msm_camera_i2c_reg_tbl {

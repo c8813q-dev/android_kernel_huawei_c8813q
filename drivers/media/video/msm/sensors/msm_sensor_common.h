@@ -29,15 +29,22 @@
 #include <media/v4l2-subdev.h>
 #include "msm_camera_i2c.h"
 #include "msm_camera_eeprom.h"
+#include <asm/mach-types.h>
+#include "linux/hardware_self_adapt.h"
 #define Q8  0x00000100
 #define Q10 0x00000400
 
 #define MSM_SENSOR_MCLK_8HZ 8000000
 #define MSM_SENSOR_MCLK_16HZ 16000000
 #define MSM_SENSOR_MCLK_24HZ 24000000
+#define MSM_SENSOR_MCLK_48HZ 48000000
 
 #define DEFINE_MSM_MUTEX(mutexname) \
 	static struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
+#define CAMERA_NAME_LEN 128  //this size is same with CAMERA_NAME_LEN in board_msm7627a_camera.c
+extern int is_first_preview_frame ;
+extern int csi_config;
+extern bool standby_mode;
 
 struct gpio_tlmm_cfg {
 	uint32_t gpio;
@@ -163,6 +170,12 @@ struct msm_sensor_fn_t {
 	int32_t (*sensor_read_eeprom)(struct msm_sensor_ctrl_t *);
 	int32_t (*sensor_hdr_update)(struct msm_sensor_ctrl_t *,
 		 struct sensor_hdr_update_parm_t *);
+	int32_t (*sensor_write_init_settings)(struct msm_sensor_ctrl_t *s_ctrl);
+	int32_t (*sensor_model_match)(struct msm_sensor_ctrl_t *s_ctrl);
+	int32_t (*sensor_set_wb)(struct msm_sensor_ctrl_t *, int);
+	int32_t (*sensor_set_effect)(struct msm_sensor_ctrl_t *, int);
+    int (*sensor_otp_reading)(struct sensor_cfg_data *cfg);
+    void (*sensor_mclk_self_adapt)(struct msm_sensor_ctrl_t *);
 };
 
 struct msm_sensor_csi_info {
@@ -218,6 +231,7 @@ struct msm_sensor_ctrl_t {
 	struct regulator **reg_ptr;
 	struct clk *cam_clk[2];
 	long clk_rate;
+	char sensor_name[CAMERA_NAME_LEN];
 	enum msm_sensor_state sensor_state;
 	/* Number of frames to delay after start / stop stream in Q10 format.
 	   Initialize to -1 for this value to be ignored */

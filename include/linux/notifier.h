@@ -208,5 +208,7 @@ static inline int notifier_to_errno(int ret)
 
 extern struct blocking_notifier_head reboot_notifier_list;
 
+/* delete 8 lines */
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_NOTIFIER_H */

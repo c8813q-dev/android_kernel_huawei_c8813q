@@ -63,6 +63,9 @@ struct msm_camera_device_platform_data {
 	uint8_t csid_core;
 	uint8_t is_vpe;
 	struct msm_bus_scale_pdata *cam_bus_scale_table;
+#ifdef CONFIG_HUAWEI_CAMERA  
+	bool (*get_board_support_flash) (void);
+#endif
 };
 
 #ifdef CONFIG_SENSORS_MT9T013
@@ -138,6 +141,9 @@ struct msm_camera_sensor_flash_src {
 			ext_driver_src;
 		struct msm_camera_sensor_flash_led led_src;
 	} _fsrc;
+#ifdef CONFIG_HUAWEI_CAMERA
+	bool (*get_board_support_flash) (void);
+#endif
 };
 
 struct msm_camera_sensor_flash_data {
@@ -187,6 +193,11 @@ struct msm_camera_gpio_conf {
 	uint8_t cam_gpio_common_tbl_size;
 	struct gpio *cam_gpio_req_tbl;
 	uint8_t cam_gpio_req_tbl_size;
+	/*used for gpio setting before power up*/
+	struct msm_gpio_set_tbl *cam_gpio_req_init_tbl;
+	uint8_t cam_gpio_req_init_tbl_size;
+	struct msm_gpio_set_tbl *cam_gpio_config_tbl_power_down;
+	uint8_t cam_gpio_config_tbl_power_down_size;
 	struct msm_gpio_set_tbl *cam_gpio_set_tbl;
 	uint8_t cam_gpio_set_tbl_size;
 	uint32_t gpio_no_mux;
@@ -194,6 +205,7 @@ struct msm_camera_gpio_conf {
 	uint8_t camera_off_table_size;
 	uint32_t *camera_on_table;
 	uint8_t camera_on_table_size;
+	void (* get_correct_gpio_set)(void);
 };
 
 enum msm_camera_i2c_mux_mode {
@@ -234,7 +246,9 @@ enum msm_camera_actuator_name {
 	MSM_ACTUATOR_MAIN_CAM_4,
 	MSM_ACTUATOR_MAIN_CAM_5,
 	MSM_ACTUATOR_MAIN_CAM_6,
-	MSM_ACTUATOR_MAIN_CAM_7,
+    MSM_ACTUATOR_MAIN_CAM_7,
+	MSM_ACTUATOR_MAIN_CAM_8,
+	MSM_ACTUATOR_MAIN_CAM_9,
 	MSM_ACTUATOR_WEB_CAM_0,
 	MSM_ACTUATOR_WEB_CAM_1,
 	MSM_ACTUATOR_WEB_CAM_2,
@@ -255,6 +269,13 @@ struct msm_eeprom_info {
 	int eeprom_read_length;
 	int eeprom_i2c_slave_addr;
 };
+#ifdef CONFIG_HUAWEI_CAMERA
+struct msm_camera_sensor_vreg {
+	const char *vreg_name;
+	unsigned int mv;
+    uint8_t always_on;
+};
+#endif 
 
 struct msm_camera_sensor_info {
 	const char *sensor_name;
@@ -265,6 +286,7 @@ struct msm_camera_sensor_info {
 	int vcm_enable;
 	int mclk;
 	int flash_type;
+    bool standby_is_supported;
 	struct msm_camera_sensor_platform_info *sensor_platform_info;
 	struct msm_camera_device_platform_data *pdata;
 	struct resource *resource;
@@ -278,6 +300,20 @@ struct msm_camera_sensor_info {
 	struct msm_actuator_info *actuator_info;
 	int pmic_gpio_enable;
 	struct msm_eeprom_info *eeprom_info;
+	#ifdef CONFIG_HUAWEI_CAMERA
+	/*we can stop camera probe after one probe succeed via the variable*/
+	int slave_sensor;
+	/*funcs for camera sensor to enable and disable power*/
+	void (*vreg_enable_func) (int);
+	void (*vreg_disable_func) (int);
+	/* set_s5k5ca_is_on used to set whether s5k5ca is on or not 
+	 * get_s5k5ca_is_on used to get whether s5k5ca is on or not
+	 */
+	void (*set_s5k5ca_is_on)(int);
+	int  (*get_s5k5ca_is_on)(void);
+	#endif
+	void (* get_camera_vreg)(struct msm_camera_sensor_platform_info *);
+	/*patch from Qualcomm*/
 };
 
 struct msm_camera_board_info {
@@ -460,6 +496,7 @@ struct mipi_dsi_panel_platform_data {
 	int fpga_3d_config_addr;
 	int *gpio;
 	struct mipi_dsi_phy_ctrl *phy_ctrl_settings;
+	char dlane_swap;
 	void (*dsi_pwm_cfg)(void);
 	char enable_wled_bl_ctrl;
 	void (*gpio_set_backlight)(int bl_level);
@@ -604,6 +641,14 @@ int msm_add_sdcc(unsigned int controller,
 		struct mmc_platform_data *plat);
 int msm_add_uio(void);
 
+#ifdef CONFIG_HUAWEI_FEATURE_OEMINFO
+int __init rmt_oeminfo_add_device(void);
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+int __init hw_extern_sdcard_add_device(void);
+#endif
+
 void msm_pm_register_irqs(void);
 struct msm_usb_host_platform_data;
 int msm_add_host(unsigned int host,
@@ -623,6 +668,12 @@ void msm_snddev_hsed_voltage_on(void);
 void msm_snddev_hsed_voltage_off(void);
 void msm_snddev_tx_route_config(void);
 void msm_snddev_tx_route_deconfig(void);
+#ifdef CONFIG_HUAWEI_KERNEL
+void msm_snddev_poweramp_4music_on(void);
+/* u8860 add hac gpio ctl */
+void msm_snddev_hac_on(void);
+void msm_snddev_hac_off(void);
+#endif
 
 extern unsigned int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
 
