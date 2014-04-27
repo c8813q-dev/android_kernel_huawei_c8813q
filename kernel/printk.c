@@ -149,6 +149,9 @@ static int console_may_schedule;
 #ifdef CONFIG_PRINTK
 
 static char __log_buf[__LOG_BUF_LEN];
+#ifdef CONFIG_EXT4_HUAWEI_DEBUG
+const char *kmsg_buf = __log_buf;
+#endif
 static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
@@ -240,6 +243,8 @@ void __init setup_log_buf(int early)
 	pr_info("early log buf free: %d(%d%%)\n",
 		free, (free * 100) / __LOG_BUF_LEN);
 }
+
+/* delete 16 lines */
 
 #ifdef CONFIG_BOOT_PRINTK_DELAY
 
@@ -991,7 +996,11 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 
 				t = cpu_clock(printk_cpu);
 				nanosec_rem = do_div(t, 1000000000);
+#ifndef CONFIG_HUAWEI_KERNEL
 				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
+#else
+				tlen = sprintf(tbuf, "[%d, %s] [%5lu.%06lu] ", current->pid, current->comm,
+#endif
 						(unsigned long) t,
 						nanosec_rem / 1000);
 
@@ -1342,7 +1351,9 @@ void console_unlock(void)
 {
 	unsigned long flags;
 	unsigned _con_start, _log_end;
-	unsigned wake_klogd = 0, retry = 0;
+	/* merge kernel commit 7ff9554 */
+	unsigned wake_klogd = 0;
+	bool retry = 0;
 
 	if (console_suspended) {
 		up(&console_sem);
@@ -1383,8 +1394,8 @@ again:
 	 * flush, no worries.
 	 */
 	raw_spin_lock(&logbuf_lock);
-	if (con_start != log_end)
-		retry = 1;
+	/* merge kernel commit 7ff9554 */
+	retry = con_start != log_end;
 	raw_spin_unlock_irqrestore(&logbuf_lock, flags);
 
 	if (retry && console_trylock())
@@ -1696,10 +1707,17 @@ int unregister_console(struct console *console)
 }
 EXPORT_SYMBOL(unregister_console);
 
+#ifdef CONFIG_HUAWEI_KERNEL
+extern void save_address_to_crash_dump(const char *fmt, ...);
+#endif
+
 static int __init printk_late_init(void)
 {
 	struct console *con;
 
+#if defined(CONFIG_HUAWEI_KERNEL) && defined(CONFIG_PRINTK)
+    save_address_to_crash_dump(" __log_buf=%p-%d;", virt_to_phys(__log_buf), sizeof(__log_buf));
+#endif
 	for_each_console(con) {
 		if (!keep_bootcon && con->flags & CON_BOOT) {
 			printk(KERN_INFO "turn off boot console %s%d\n",

@@ -468,6 +468,11 @@ static inline int msm_flash_ctrl(
 }
 #endif
 
+/* Add set led state interface for all type of leds. */
+extern void register_led_set_state( int (* func)(unsigned led_state) );
+extern int call_led_set_state(unsigned led_state);
+
+/* delete tps61310 set state interface */
 
 
 void msm_camvfe_init(void);

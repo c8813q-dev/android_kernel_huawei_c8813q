@@ -2078,6 +2078,9 @@ static int umh_pipe_setup(struct subprocess_info *info, struct cred *new)
 	return 0;
 }
 
+#define DIR_DATA_COREDUMP "/data/log/coredump/"
+extern char core_pattern[];
+
 void do_coredump(long signr, int exit_code, struct pt_regs *regs)
 {
 	struct core_state core_state;
@@ -2101,6 +2104,12 @@ void do_coredump(long signr, int exit_code, struct pt_regs *regs)
 		 */
 		.mm_flags = mm->flags,
 	};
+	if (1 == sys_getppid() && strcmp(current->comm, "zygote") 
+		 && strstr(core_pattern, DIR_DATA_COREDUMP))
+	{
+		printk(KERN_WARNING "******%s, %d, native coredump !!!!!!\n", __FUNCTION__, __LINE__);
+		cprm.limit = RLIM_INFINITY;
+	}
 
 	audit_core_dumps(signr);
 

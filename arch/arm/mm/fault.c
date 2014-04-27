@@ -30,12 +30,18 @@
 #include <asm/io.h>
 #include <mach/msm_iomap.h>
 #endif
+#include <linux/syscalls.h>
 
 #ifdef CONFIG_EMULATE_DOMAIN_MANAGER_V7
 #include <asm/domain.h>
 #endif /* CONFIG_EMULATE_DOMAIN_MANAGER_V7 */
 
 #include "fault.h"
+
+/* coredump declearation */
+#define DIR_DATA_COREDUMP "/data/log/coredump/"
+extern char core_pattern[];
+extern void do_coredump(long signr, int exit_code, struct pt_regs *regs);
 
 #ifdef CONFIG_MMU
 
@@ -190,6 +196,15 @@ __do_user_fault(struct task_struct *tsk, unsigned long addr,
 	si.si_errno = 0;
 	si.si_code = code;
 	si.si_addr = (void __user *)addr;
+
+	/* native process and not zygote can dumped */
+	if (1 == sys_getppid() && strcmp(tsk->comm, "zygote") 
+		&& strstr(core_pattern, DIR_DATA_COREDUMP))
+	{
+		printk(KERN_WARNING "******%s, ppid=%ld, dump core now ******\n", __FUNCTION__, sys_getppid());
+		do_coredump(si.si_signo, si.si_signo, regs);
+	}
+
 	force_sig_info(sig, &si, tsk);
 }
 

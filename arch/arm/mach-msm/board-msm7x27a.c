@@ -49,6 +49,8 @@
 #include <linux/smsc911x.h>
 #include <linux/atmel_maxtouch.h>
 #include <linux/msm_adc.h>
+#include <linux/i2c-gpio.h>
+#include <linux/regulator/onsemi-ncp6335d.h>
 #include <linux/ion.h>
 #include <linux/dma-contiguous.h>
 #include <linux/dma-mapping.h>
@@ -61,8 +63,36 @@
 #include <mach/socinfo.h>
 #include "pm-boot.h"
 #include "board-msm7627a.h"
+#ifdef CONFIG_HUAWEI_MTK6252_MODEM
+#include <mach/msm_smsm.h>
+#include <linux/mtk6252_dev.h>
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <linux/hardware_self_adapt.h>
+/*added for virtualkeys*/
+#ifdef CONFIG_INPUT_HW_ATE
+char buf_virtualkey[500];
+ssize_t  buf_vkey_size=0;
+#else
+static char buf_virtualkey[500];
+static ssize_t  buf_vkey_size=0;
+#endif
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <asm-arm/huawei/smem_vendor_huawei.h>
+#include <asm-arm/huawei/usb_switch_huawei.h>
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <linux/regulator/fairchild-fan53555.h>
+#endif
 
 #define PMEM_KERNEL_EBI1_SIZE	0x3A000
+
+#define CYTTSP4_VIRTUAL_KEYS
+
 #define MSM_PMEM_AUDIO_SIZE	0xF0000
 #define BOOTLOADER_BASE_ADDR	0x10000
 
@@ -70,6 +100,79 @@
 enum {
 	SX150X_CORE,
 };
+
+/* -------------------- huawei devices -------------------- */
+/* add leds,button-backlight,pmic-leds device */
+#ifdef CONFIG_HUAWEI_KERNEL
+static struct platform_device rgb_leds_device = {
+    .name   = "rgb-leds",
+    .id     = 0,
+};
+
+static struct platform_device keyboard_backlight_device = {
+    .name       = "button-backlight",
+    .id     = 1,
+}; 
+
+static struct platform_device msm_device_pmic_leds = {
+    .name   = "pmic-leds",
+    .id = -1,
+};
+#endif
+
+/* driver for hw device detect */
+#ifdef CONFIG_HUAWEI_HW_DEV_DCT
+static struct platform_device huawei_device_detect = {
+	.name = "hw-dev-detect",
+	.id   =-1,
+};
+#endif
+#ifdef CONFIG_HUAWEI_KERNEL
+static struct resource hw_extern_sdcard_resources[] = {
+    {
+        .flags  = IORESOURCE_MEM,
+    },
+};
+
+/* 
+ * Define the 'hw_extern_sdcard' device node for MMI sdcard test to  
+ * judge if the sd card inserted.
+ */
+static struct platform_device hw_extern_sdcard_device = {
+    .name           = "hw_extern_sdcard",
+    .id             = -1,
+    .num_resources  = ARRAY_SIZE(hw_extern_sdcard_resources),
+    .resource       = hw_extern_sdcard_resources,
+};
+
+static struct resource hw_extern_sdcardMounted_resources[] = {
+    {
+        .flags  = IORESOURCE_MEM,
+    },
+};
+
+/* 
+ * Define the 'hw_extern_sdcardMounted' device node for MMI sdcard test to  
+ * judge if the sd card mounted.
+ */
+static struct platform_device hw_extern_sdcardMounted_device = {
+    .name           = "hw_extern_sdcardMounted",
+    .id             = -1,
+    .num_resources  = ARRAY_SIZE(hw_extern_sdcardMounted_resources),
+    .resource       = hw_extern_sdcardMounted_resources,
+};
+
+/* 
+ * Add the device nodes 'hw_extern_sdcard' and 'hw_extern_sdcardMounted' in /dev. 
+ * It is used by MMI sdcard test.
+ */
+int __init hw_extern_sdcard_add_device(void)
+{
+    platform_device_register(&hw_extern_sdcard_device);
+    platform_device_register(&hw_extern_sdcardMounted_device);
+    return 0;
+}
+#endif
 
 static struct sx150x_platform_data sx150x_data[] __initdata = {
 	[SX150X_CORE]	= {
@@ -135,6 +238,27 @@ static struct msm_gpio qup_i2c_gpios_hw[] = {
 		"qup_sda" },
 };
 
+static struct msm_gpio i2c_gpio_config[] = {
+	{ GPIO_CFG(39, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+	  "qup_scl" },
+	{ GPIO_CFG(36, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+	  "qup_sda" },
+};
+
+static struct i2c_gpio_platform_data i2c_gpio_pdata = {
+	.scl_pin = 39,
+	.sda_pin = 36,
+	.udelay = 5, /* 100 Khz */
+};
+
+static struct platform_device msm8625q_i2c_gpio = {
+	.name= "i2c-gpio",
+	.id= 2,
+	.dev= {
+		.platform_data = &i2c_gpio_pdata,
+	}
+};
+
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 {
 	int rc;
@@ -166,8 +290,22 @@ static struct msm_i2c_platform_data msm_gsbi1_qup_i2c_pdata = {
 #define MSM7x25A_MSM_PMEM_MDP_SIZE       0x1500000
 
 #define MSM_PMEM_ADSP_SIZE      0x1300000
+#define MSM_PMEM_ADSP_BIG_SIZE      0x1E00000
 #define MSM7x25A_MSM_PMEM_ADSP_SIZE      0xB91000
 #define CAMERA_ZSL_SIZE		(SZ_1M * 60)
+
+/*   enlarge the pmem space for HDR on 8950s
+ */
+static unsigned int get_pmem_adsp_size(void)
+{
+	if( machine_is_msm8x25_C8950D()	)
+    {
+		return MSM_PMEM_ADSP_BIG_SIZE;		
+	}
+	else
+		return MSM_PMEM_ADSP_SIZE;
+
+}
 #endif
 
 #ifdef CONFIG_ION_MSM
@@ -340,12 +478,13 @@ static struct platform_device smc91x_device = {
 	.resource       = smc91x_resources,
 };
 
-#ifdef CONFIG_SERIAL_MSM_HS
+/* back to qcomm orignal 1025 baseline */
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
 	.inject_rx_on_wakeup	= 1,
 	.rx_to_inject		= 0xFD,
 };
-#endif
+
+
 static struct msm_pm_platform_data msm7x27a_pm_data[MSM_PM_SLEEP_MODE_NR] = {
 	[MSM_PM_MODE(0, MSM_PM_SLEEP_MODE_POWER_COLLAPSE)] = {
 					.idle_supported = 1,
@@ -577,7 +716,9 @@ static struct platform_device msm_batt_device = {
 	.id                 = -1,
 	.dev.platform_data  = &msm_psy_batt_data,
 };
-
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
+#ifndef CONFIG_HUAWEI_CAMERA
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
 static struct smsc911x_platform_config smsc911x_config = {
 	.irq_polarity	= SMSC911X_IRQ_POLARITY_ACTIVE_HIGH,
 	.irq_type	= SMSC911X_IRQ_TYPE_PUSH_PULL,
@@ -613,7 +754,9 @@ static struct msm_gpio smsc911x_gpios[] = {
 	{ GPIO_CFG(49, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA),
 							 "eth_fifo_sel" },
 };
-
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
+#endif
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
 static char *msm_adc_surf_device_names[] = {
 	"XO_ADC",
 };
@@ -632,7 +775,88 @@ static struct platform_device msm_adc_device = {
 	},
 };
 
+#ifdef CONFIG_HUAWEI_KERNEL
+/* Regulator configuration for the FAN53555 buck */
+static struct regulator_consumer_supply fan53555_consumer_supplies[] = {
+	REGULATOR_SUPPLY("fan53555", NULL),
+	REGULATOR_SUPPLY("vddx_cx", NULL),
+};
+
+static struct regulator_init_data fan53555_init_data = {
+	.constraints= {
+		.name= "fan53555_sw",
+		.min_uV= 603000,
+		.max_uV= 1411000,
+		.valid_ops_mask= REGULATOR_CHANGE_VOLTAGE |
+		REGULATOR_CHANGE_STATUS |
+		REGULATOR_CHANGE_MODE,
+		.valid_modes_mask = REGULATOR_MODE_NORMAL |
+		REGULATOR_MODE_FAST,
+		.initial_mode= REGULATOR_MODE_NORMAL,
+		.always_on= 1,
+	},
+	.num_consumer_supplies = ARRAY_SIZE(fan53555_consumer_supplies),
+	.consumer_supplies = fan53555_consumer_supplies,
+};
+
+static struct fan53555_platform_data fan53555_pdata = {
+	.init_data = &fan53555_init_data,
+	.default_vsel = FAN53555_VSEL0,
+	.slew_rate_ns = 200,
+	.rearm_disable = 1,
+};
+#endif
+
+/* Regulator configuration for the NCP6335D buck */
+static struct regulator_consumer_supply ncp6335d_consumer_supplies[] = {
+	REGULATOR_SUPPLY("ncp6335d", NULL),
+	/* TO DO: NULL entry needs to be fixed once
+	 * we fix the cross-dependencies.
+	 */
+	REGULATOR_SUPPLY("vddx_cx", NULL),
+};
+
+static struct regulator_init_data ncp6335d_init_data = {
+	.constraints= {
+		.name= "ncp6335d_sw",
+		.min_uV= 600000,
+		.max_uV= 1400000,
+		.valid_ops_mask= REGULATOR_CHANGE_VOLTAGE |
+		REGULATOR_CHANGE_STATUS |
+		REGULATOR_CHANGE_MODE,
+		.valid_modes_mask = REGULATOR_MODE_NORMAL |
+		REGULATOR_MODE_FAST,
+		.initial_mode= REGULATOR_MODE_NORMAL,
+		.always_on= 1,
+	},
+	.num_consumer_supplies = ARRAY_SIZE(ncp6335d_consumer_supplies),
+	.consumer_supplies = ncp6335d_consumer_supplies,
+};
+
+static struct ncp6335d_platform_data ncp6335d_pdata = {
+	.init_data = &ncp6335d_init_data,
+	.default_vsel = NCP6335D_VSEL0,
+	.slew_rate_ns = 333,
+	.rearm_disable = 1,
+};
+
+static struct i2c_board_info i2c2_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("ncp6335d", 0x38 >> 1),
+		.platform_data = &ncp6335d_pdata,
+	},
+#ifdef CONFIG_HUAWEI_KERNEL
+	{
+		I2C_BOARD_INFO("fan53555", 0x60),
+		.platform_data = &fan53555_pdata,
+	},
+#endif
+};
+
 #define ETH_FIFO_SEL_GPIO	49
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
+#ifndef CONFIG_HUAWEI_CAMERA
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
 static void msm7x27a_cfg_smsc911x(void)
 {
 	int res;
@@ -655,6 +879,9 @@ static void msm7x27a_cfg_smsc911x(void)
 	}
 	gpio_set_value(ETH_FIFO_SEL_GPIO, 0);
 }
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
+#endif 
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
 
 #if defined(CONFIG_SERIAL_MSM_HSL_CONSOLE) \
 		&& defined(CONFIG_MSM_SHARED_GPIO_FOR_UART2DM)
@@ -681,6 +908,18 @@ static void msm7x27a_cfg_uart2dm_serial(void)
 static void msm7x27a_cfg_uart2dm_serial(void) { }
 #endif
 
+/* delete uart1 serial port */
+#ifdef CONFIG_HUAWEI_KERNEL
+static struct platform_device *rumi_sim_devices[] __initdata = {
+	&msm_device_dmov,
+	&msm_device_smd,
+	&smc91x_device,
+	&msm_device_nand,
+	&msm_device_uart_dm1,
+	&msm_gsbi0_qup_i2c_device,
+	&msm_gsbi1_qup_i2c_device,
+};
+#else
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_dmov,
 	&msm_device_smd,
@@ -691,6 +930,7 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_gsbi0_qup_i2c_device,
 	&msm_gsbi1_qup_i2c_device,
 };
+#endif
 
 static struct platform_device *msm8625_rumi3_devices[] __initdata = {
 	&msm8625_device_dmov,
@@ -709,8 +949,13 @@ static struct platform_device *msm7627a_surf_ffa_devices[] __initdata = {
 	&msm_gsbi1_qup_i2c_device,
 	&msm_device_otg,
 	&msm_device_gadget_peripheral,
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
+#ifndef CONFIG_HUAWEI_CAMERA
 	&smsc911x_device,
+#endif
+/* lishubin update to 1215 added ifndef CONFIG_HUAWEI_CAMERA & endif*/
 	&msm_kgsl_3d0,
+    &msm8625q_i2c_gpio,
 };
 
 static struct platform_device *common_devices[] __initdata = {
@@ -726,6 +971,19 @@ static struct platform_device *common_devices[] __initdata = {
 	&asoc_msm_dai0,
 	&asoc_msm_dai1,
 	&msm_batt_device,
+	
+/* delete all bt devices */
+#ifdef CONFIG_HUAWEI_KERNEL
+	
+	/* Registration device */
+	&rgb_leds_device,
+	&keyboard_backlight_device,
+	&msm_device_pmic_leds,
+    /* Registration device */
+#ifdef CONFIG_HUAWEI_HW_DEV_DCT
+	&huawei_device_detect,
+#endif
+#endif
 	&msm_adc_device,
 #ifdef CONFIG_ION_MSM
 	&ion_dev,
@@ -743,6 +1001,7 @@ static struct platform_device *msm8625_surf_devices[] __initdata = {
 	&msm8625_device_otg,
 	&msm8625_device_gadget_peripheral,
 	&msm8625_kgsl_3d0,
+	&msm8625q_i2c_gpio,
 };
 
 static unsigned pmem_kernel_ebi1_size = PMEM_KERNEL_EBI1_SIZE;
@@ -767,8 +1026,10 @@ static void fix_sizes(void)
 		pmem_mdp_size = MSM7x25A_MSM_PMEM_MDP_SIZE;
 		pmem_adsp_size = MSM7x25A_MSM_PMEM_ADSP_SIZE;
 	} else {
-		pmem_mdp_size = MSM_PMEM_MDP_SIZE;
-		pmem_adsp_size = MSM_PMEM_ADSP_SIZE;
+		pmem_mdp_size = get_mdp_pmem_size();
+		printk("pmem_mdp_size=%08x\n",pmem_mdp_size);
+		pmem_adsp_size = get_pmem_adsp_size();
+		printk("pmem_adsp_size=%08x\n",pmem_adsp_size);
 	}
 
 	if (get_ddr_size() > SZ_512M)
@@ -884,15 +1145,7 @@ static struct memtype_reserve msm7x27a_reserve_table[] __initdata = {
 	},
 };
 
-#ifdef CONFIG_ANDROID_PMEM
-#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
-static struct android_pmem_platform_data *pmem_pdata_array[] __initdata = {
-		&android_pmem_adsp_pdata,
-		&android_pmem_audio_pdata,
-		&android_pmem_pdata,
-};
-#endif
-#endif
+/*  update Qcomm original  base line , delete 7 lines for fmem disable and avoid deadlock*/
 
 static void __init size_pmem_devices(void)
 {
@@ -918,9 +1171,10 @@ static void __init reserve_pmem_memory(void)
 {
 #ifdef CONFIG_ANDROID_PMEM
 #ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
-	unsigned int i;
-	for (i = 0; i < ARRAY_SIZE(pmem_pdata_array); ++i)
-		reserve_memory_for(pmem_pdata_array[i]);
+    /*  update Qcomm original  base line , delete 3 lines and add 3 lines for fmem disable and avoid deadlock*/	
+	reserve_memory_for(&android_pmem_adsp_pdata);
+	reserve_memory_for(&android_pmem_pdata);
+	reserve_memory_for(&android_pmem_audio_pdata);
 
 	msm7x27a_reserve_table[MEMTYPE_EBI1].size += pmem_kernel_ebi1_size;
 #endif
@@ -967,12 +1221,70 @@ static struct reserve_info msm7x27a_reserve_info __initdata = {
 	.paddr_to_memtype = msm7x27a_paddr_to_memtype,
 };
 
+/* define size of reserve memory is 1M */
+#ifdef CONFIG_SRECORDER_MSM
+/*srecorder reserved memory increase to 1M */
+#define SRECORDER_RESERVED_MEM_SIZE (SZ_1M)
+
+/* define start address of reserve memory */
+static unsigned long s_srecorder_reserved_mem_phys_start_addr = 0x0;
+
+/*
+ * Function:       unsigned long get_srecorder_reserved_mem_size(void)
+ * Description:    get size of reserve memory
+ * Calls:          No
+ * Called By:      setup_arch
+ * Table Accessed: No
+ * Table Updated:  No
+ * Input:          No
+ * Output:         No
+ * Return:         SRECORDER_RESERVED_MEM_SIZE: size of reserve memory
+ * Others:         No
+ */
+unsigned long get_srecorder_reserved_mem_size(void)
+{
+    return SRECORDER_RESERVED_MEM_SIZE;
+}
+
+/*
+ * Function:       unsigned long get_mempools_pstart_addr(void)
+ * Description:    get start address of reserve memory
+ * Calls:          No
+ * Called By:      msm8625_reserve
+ * Table Accessed: No
+ * Table Updated:  No
+ * Input:          No
+ * Output:         No
+ * Return:         s_srecorder_reserved_mem_phys_start_addr:start address of reserve memory
+ * Others:         No
+ */
+unsigned long get_srecorder_reserved_mem_phys_start_addr(void)
+{
+    return s_srecorder_reserved_mem_phys_start_addr;
+}
+
+extern unsigned long get_mempools_pstart_addr(void);
+#endif /* CONFIG_SRECORDER_MSM */
+
 static void __init msm7x27a_reserve(void)
 {
 	reserve_info = &msm7x27a_reserve_info;
 	memblock_remove(MSM8625_NON_CACHE_MEM, SZ_2K);
 	memblock_remove(BOOTLOADER_BASE_ADDR, msm_ion_audio_size);
 	msm_reserve();
+
+#ifdef CONFIG_SRECORDER_MSM
+    if (0x0 != get_mempools_pstart_addr())
+    {
+        s_srecorder_reserved_mem_phys_start_addr = get_mempools_pstart_addr();// - SRECORDER_RESERVED_MEM_SIZE;
+    }
+    else
+    {
+        printk(">>>> Can't know the start address for S-Recorder's reserved memory!\n");
+    }
+#endif /* CONFIG_SRECORDER_MSM */
+	memblock_remove(MSM8625_NON_CACHE_MEM, SZ_2K);
+
 #ifdef CONFIG_CMA
 	dma_declare_contiguous(
 			&ion_cma_device.dev,
@@ -982,8 +1294,15 @@ static void __init msm7x27a_reserve(void)
 #endif
 }
 
+
+/* 此段代码被全部移到static void __init msm7x27a_reserve(void)函数前面 */
+
 static void __init msm8625_reserve(void)
 {
+	msm7x27a_reserve();
+
+/* 此段代码被全部移到的实现被移到static void __init msm7x27a_reserve(void)函数里面实现 */
+
 	memblock_remove(MSM8625_CPU_PHYS, SZ_8);
 	memblock_remove(MSM8625_WARM_BOOT_PHYS, SZ_32);
 	msm7x27a_reserve();
@@ -997,10 +1316,20 @@ static void __init msm7x27a_device_i2c_init(void)
 
 static void __init msm8625_device_i2c_init(void)
 {
+	int i, rc;
 	msm8625_gsbi0_qup_i2c_device.dev.platform_data =
 		&msm_gsbi0_qup_i2c_pdata;
 	msm8625_gsbi1_qup_i2c_device.dev.platform_data =
 		&msm_gsbi1_qup_i2c_pdata;
+	if (machine_is_qrd_skud_prime() || machine_is_msm8625q_evbd()
+	    || machine_is_msm8625q_skud() || cpu_is_msm8625q()){
+		for (i = 0 ; i < ARRAY_SIZE(i2c_gpio_config); i++) {
+			rc = gpio_tlmm_config(i2c_gpio_config[i].gpio_cfg,
+					      GPIO_CFG_ENABLE);
+			if (rc)
+				pr_err("I2C-gpio tlmm config failed\n");
+		}
+	}
 }
 
 #define MSM_EBI2_PHYS			0xa0d00000
@@ -1109,7 +1438,103 @@ static void __init msm7x27a_init_regulators(void)
 		pr_err("%s: could not register regulator device: %d\n",
 				__func__, rc);
 }
+/* add virtual keys fucntion */
+/* modify virtualkey function name */
+static ssize_t virtualkey_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+        memcpy( buf, buf_virtualkey, buf_vkey_size );
+		return buf_vkey_size; 
+}
 
+static struct kobj_attribute synaptics_virtual_keys_attr = {
+	.attr = {
+		.name = "virtualkeys.synaptics",
+		.mode = S_IRUGO,
+	},
+	.show = &virtualkey_show,
+};
+
+#ifdef CONFIG_HUAWEI_MELFAS_TOUCHSCREEN
+/* add melfas virtual key node */
+static struct kobj_attribute melfas_virtual_keys_attr = {
+	.attr = {
+		.name = "virtualkeys.melfas-touchscreen",
+		.mode = S_IRUGO,
+	},
+	.show = &virtualkey_show,
+};
+#endif
+#ifdef CYTTSP4_VIRTUAL_KEYS
+static struct kobj_attribute cyttsp4_virtualkeys_attr = {
+	.attr = {
+		.name = "virtualkeys.cyttsp4_mt",
+		.mode = S_IRUGO,
+	},
+	.show = &virtualkey_show,
+};
+#endif
+static struct attribute *virtualkey_properties_attrs[] = {
+	&synaptics_virtual_keys_attr.attr,
+	#ifdef CONFIG_HUAWEI_MELFAS_TOUCHSCREEN
+	&melfas_virtual_keys_attr.attr,
+	#endif
+	#ifdef CYTTSP4_VIRTUAL_KEYS
+	&cyttsp4_virtualkeys_attr.attr,
+	#endif
+	NULL
+};
+static struct attribute_group virtualkey_properties_attr_group = {
+	.attrs = virtualkey_properties_attrs,
+};
+static void __init virtualkeys_init(void)
+{
+    struct kobject *properties_kobj;
+    int ret=0;
+    /* when sub boardid equals HW_VER_SUB_V1 G520 support qhd */
+    hw_product_sub_type product_sub_type = get_hw_sub_board_id();
+
+    if( machine_is_msm8x25_C8950D()
+		|| machine_is_msm8x25_G610C()
+        || (machine_is_msm8x25_G520U() && HW_VER_SUB_V1 == product_sub_type) )
+    {
+        /* extend the height of virtual key area (from 80 to 120 pixels)*/
+        buf_vkey_size = sprintf(buf_virtualkey,
+        			__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":80:1035:160:120"
+        		   ":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":270:1035:160:120"
+        		   ":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":460:1035:160:120"
+        		   "\n");
+    }
+    /*New add FWVGA virtual keys */
+    else if (machine_is_msm8x25_U8951()
+        || machine_is_msm8x25_C8813()
+        || machine_is_msm8x25_G520U()
+        || machine_is_msm8x25_C8813Q()
+       )
+	/* modify the area of virtualkeys */
+    {
+    	buf_vkey_size = sprintf(buf_virtualkey,
+        			__stringify(EV_KEY) ":" __stringify(KEY_BACK)  ":71:900:142:80"
+        		   ":" __stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":240:900:142:80"
+        		   ":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":409:900:142:80"
+        		   "\n"); 
+    }
+    else
+    {
+    	buf_vkey_size = sprintf(buf_virtualkey,
+        			__stringify(EV_KEY) ":" __stringify(KEY_MENU)  ":57:850:100:80"
+        		   ":" __stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":240:850:100:80"
+        		   ":" __stringify(EV_KEY) ":" __stringify(KEY_BACK) ":423:850:100:80"
+        		   "\n"); 
+    }
+
+    properties_kobj = kobject_create_and_add("board_properties", NULL);
+	if (properties_kobj)
+		ret = sysfs_create_group(properties_kobj,
+					 &virtualkey_properties_attr_group);
+	if (!properties_kobj || ret)
+		pr_err("failed to create board_properties\n");
+}
 static void __init msm7x27a_add_footswitch_devices(void)
 {
 	platform_add_devices(msm_footswitch_devices,
@@ -1118,7 +1543,13 @@ static void __init msm7x27a_add_footswitch_devices(void)
 
 static void __init msm7x27a_add_platform_devices(void)
 {
-	if (machine_is_msm8625_surf() || machine_is_msm8625_ffa()) {
+#ifdef CONFIG_HUAWEI_KERNEL
+    if (machine_is_msm8625_surf() || machine_is_msm8625_ffa()
+        || cpu_is_msm8625() || cpu_is_msm8625q() )
+#else
+    if (machine_is_msm8625_surf() || machine_is_msm8625_ffa())
+#endif
+    {
 		platform_add_devices(msm8625_surf_devices,
 			ARRAY_SIZE(msm8625_surf_devices));
 	} else {
@@ -1161,7 +1592,13 @@ static void __init msm7x27a_otg_gadget(void)
 
 static void __init msm7x27a_pm_init(void)
 {
-	if (machine_is_msm8625_surf() || machine_is_msm8625_ffa()) {
+#ifdef CONFIG_HUAWEI_KERNEL
+    if (machine_is_msm8625_surf() || machine_is_msm8625_ffa()
+        || cpu_is_msm8625() || cpu_is_msm8625q() )
+#else
+    if (machine_is_msm8625_surf() || machine_is_msm8625_ffa())
+#endif
+    {
 		msm_pm_set_platform_data(msm8625_pm_data,
 				ARRAY_SIZE(msm8625_pm_data));
 		BUG_ON(msm_pm_boot_init(&msm_pm_8625_boot_pdata));
@@ -1190,9 +1627,18 @@ static void __init msm7x2x_init(void)
 	msm7x27a_init_ebi2();
 	msm7x27a_uartdm_config();
 
-	msm7x27a_otg_gadget();
-	msm7x27a_cfg_smsc911x();
+#ifdef CONFIG_HUAWEI_KERNEL
+    import_kernel_cmdline();
+#endif
 
+	msm7x27a_otg_gadget();
+#ifndef CONFIG_HUAWEI_CAMERA
+    msm7x27a_cfg_smsc911x();
+#endif
+#if (defined(HUAWEI_BT_BTLA_VER30) && defined(CONFIG_HUAWEI_KERNEL))
+    /*before bt probe, config the bt_wake_msm gpio*/
+    bt_wake_msm_config();
+#endif
 	msm7x27a_add_footswitch_devices();
 	msm7x27a_add_platform_devices();
 	/* Ensure ar6000pm device is registered before MMC/SDC */
@@ -1202,15 +1648,42 @@ static void __init msm7x2x_init(void)
 	msm7x2x_init_host();
 	msm7x27a_pm_init();
 	register_i2c_devices();
-#if defined(CONFIG_BT) && defined(CONFIG_MARIMBA_CORE)
+    if (machine_is_qrd_skud_prime() || machine_is_msm8625q_evbd()
+	    || machine_is_msm8625q_skud() || cpu_is_msm8625q())
+		i2c_register_board_info(2, i2c2_info,
+					ARRAY_SIZE(i2c2_info));
+	/* bt power init */
 	msm7627a_bt_power_init();
-#endif
 	msm7627a_camera_init();
 	msm7627a_add_io_devices();
 	/*7x25a kgsl initializations*/
 	msm7x25a_kgsl_3d0_init();
+	
+#ifdef CONFIG_HUAWEI_FEATURE_OEMINFO
+    rmt_oeminfo_add_device();
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	virtualkeys_init();
+#endif
+
+#ifdef CONFIG_HUAWEI_KERNEL
+    hw_extern_sdcard_add_device();
+#endif
+    
 	/*8x25 kgsl initializations*/
 	msm8x25_kgsl_3d0_init();
+
+	
+#ifdef CONFIG_HUAWEI_MTK6252_MODEM
+	{
+		unsigned smem_size;
+		boot_reason = *(unsigned int *)
+			(smem_get_entry(SMEM_POWER_ON_STATUS_INFO, &smem_size));
+		printk(KERN_NOTICE "Boot Reason = 0x%02x\n", boot_reason);
+		mtk6252_dev_init();
+	}
+#endif
 }
 
 static void __init msm7x2x_init_early(void)
@@ -1287,8 +1760,58 @@ MACHINE_START(MSM8625_SURF, "QCT MSM8625 SURF")
 	.init_early     = msm7x2x_init_early,
 	.handle_irq	= gic_handle_irq,
 MACHINE_END
-MACHINE_START(MSM8625_FFA, "QCT MSM8625 FFA")
-	.atag_offset    = 0x100,
+MACHINE_START(MSM8X25_U8951, "MSM8x25 U8951 BOARD")
+	.atag_offset    = PHYS_OFFSET + 0x100,
+	.map_io         = msm8625_map_io,
+	.reserve        = msm8625_reserve,
+	.init_irq       = msm8625_init_irq,
+	.init_machine   = msm7x2x_init,
+	.timer          = &msm_timer,
+	.init_early     = msm7x2x_init_early,
+	.handle_irq	= gic_handle_irq,
+MACHINE_END
+MACHINE_START(MSM8X25_C8950D, "MSM8x25 C8950D BOARD")
+	.atag_offset    = PHYS_OFFSET + 0x100,
+	.map_io         = msm8625_map_io,
+	.reserve        = msm8625_reserve,
+	.init_irq       = msm8625_init_irq,
+	.init_machine   = msm7x2x_init,
+	.timer          = &msm_timer,
+	.init_early     = msm7x2x_init_early,
+	.handle_irq	= gic_handle_irq,
+MACHINE_END
+MACHINE_START(MSM8X25_C8813, "MSM8x25 C8813 BOARD")
+	.atag_offset    = PHYS_OFFSET + 0x100,
+	.map_io         = msm8625_map_io,
+	.reserve        = msm8625_reserve,
+	.init_irq       = msm8625_init_irq,
+	.init_machine   = msm7x2x_init,
+	.timer          = &msm_timer,
+	.init_early     = msm7x2x_init_early,
+	.handle_irq	= gic_handle_irq,
+MACHINE_END
+MACHINE_START(MSM8X25_G520U, "MSM8x25 G520U BOARD")
+	.atag_offset    = PHYS_OFFSET + 0x100,
+	.map_io         = msm8625_map_io,
+	.reserve        = msm8625_reserve,
+	.init_irq       = msm8625_init_irq,
+	.init_machine   = msm7x2x_init,
+	.timer          = &msm_timer,
+	.init_early     = msm7x2x_init_early,
+	.handle_irq	= gic_handle_irq,
+MACHINE_END
+MACHINE_START(MSM8X25_C8813Q, "MSM8x25 C8813Q BOARD")
+	.atag_offset    = PHYS_OFFSET + 0x100,
+	.map_io         = msm8625_map_io,
+	.reserve        = msm8625_reserve,
+	.init_irq       = msm8625_init_irq,
+	.init_machine   = msm7x2x_init,
+	.timer          = &msm_timer,
+	.init_early     = msm7x2x_init_early,
+	.handle_irq	= gic_handle_irq,
+MACHINE_END
+MACHINE_START(MSM8X25_G610C, "MSM8x25 G610C BOARD")
+	.atag_offset    = PHYS_OFFSET + 0x100,
 	.map_io         = msm8625_map_io,
 	.reserve        = msm8625_reserve,
 	.init_irq       = msm8625_init_irq,

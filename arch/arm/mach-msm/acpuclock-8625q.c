@@ -53,6 +53,12 @@
 /* Max CPU frequency allowed by hardware while in standby waiting for an irq. */
 #define MAX_WAIT_FOR_IRQ_KHZ 128000
 
+#define SHUTDOWN_FREQ_KHZ 700800
+#ifdef CONFIG_HUAWEI_KERNEL
+struct regulator *cpu_core_voltage_handle;
+#else
+struct regulator *ncp6335d_handle;
+#endif
 struct regulator *ext_vreg_handle;
 
 /**
@@ -66,6 +72,11 @@ enum {
 	ACPU_PLL_4,
 	ACPU_PLL_TCXO,
 	ACPU_PLL_END,
+};
+enum {
+       STATE_NORMAL            = 0,
+       STATE_SHUTDOWN_PREPARE,
+       STATE_SHUTDOWN_DONE,
 };
 
 struct acpu_clk_src {
@@ -101,6 +112,7 @@ struct clock_state {
 	struct clk			*ebi1_clk;
 	struct regulator		*vreg_cpu;
 	bool				probe_success;
+	int                             restart_config_done;
 };
 
 struct clkctl_acpu_speed {
@@ -271,6 +283,8 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s)
 	reg_clkctl |= hunt_s->a11clk_src_sel << (4 + 8 * src_sel);
 	reg_clkctl |= hunt_s->a11clk_src_div << (0 + 8 * src_sel);
 	writel_relaxed(reg_clkctl, A11S_CLK_CNTL_ADDR);
+/*rerutn back to qcom 3027*/
+
 
 	/* Wait for write to CNTL register to take affect */
 	mb();
@@ -327,6 +341,14 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 	if (reason == SETRATE_CPUFREQ)
 		mutex_lock(&drv_state.lock);
 
+       if ((drv_state.restart_config_done == STATE_SHUTDOWN_DONE) ||
+                       (drv_state.restart_config_done ==
+                        STATE_SHUTDOWN_PREPARE && rate != SHUTDOWN_FREQ_KHZ)) {
+               pr_err("Frequency set to %d for shutdown, cannot reconfigure to %lu\n",
+                               SHUTDOWN_FREQ_KHZ, rate);
+               rc = -EINVAL;
+               goto out;
+       }
 	strt_s = cur_s = drv_state.current_speed;
 
 	WARN_ONCE(cur_s == NULL, "%s: not initialized\n", __func__);
@@ -481,12 +503,26 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 		pr_debug("Decreased Vdd to %duV\n", tgt_s->vdd);
 	}
 
+       if (drv_state.restart_config_done == STATE_SHUTDOWN_PREPARE)
+               drv_state.restart_config_done = STATE_SHUTDOWN_DONE;
 	pr_debug("ACPU speed change complete\n");
 out:
 	if (reason == SETRATE_CPUFREQ)
 		mutex_unlock(&drv_state.lock);
 
 	return rc;
+}
+static void acpuclk_8625q_restart_config(struct platform_device *pdev)
+{
+       int rc;
+       drv_state.restart_config_done = STATE_SHUTDOWN_PREPARE;
+       rc = acpuclk_8625q_set_rate(0, SHUTDOWN_FREQ_KHZ, SETRATE_CPUFREQ);
+       if (rc) {
+               pr_err("Unable to set frequency to %dKhz\n", SHUTDOWN_FREQ_KHZ);
+               return;
+       }
+       pr_debug("%s: Current ACPU frequency %ld\n", __func__,
+                       acpuclk_get_rate(0));
 }
 
 static int __devinit acpuclk_hw_init(void)
@@ -546,6 +582,7 @@ static int __devinit acpuclk_hw_init(void)
 	reg_clksel |= (0x1 << 14);
 	reg_clksel &= ~(0x3 << 1);
 	reg_clksel |= (0x3 << 1);
+
 	writel_relaxed(reg_clksel, A11S_CLK_SEL_ADDR);
 
 	res = clk_set_rate(drv_state.ebi1_clk, speed->axiclk_khz * 1000);
@@ -589,6 +626,7 @@ static int reinitialize_freq_table(bool target_select)
 			if (tbl->a11clk_khz >= 1008000) {
 				tbl->axiclk_khz = 300000;
 				if (tbl->a11clk_khz == 1209600)
+
 					tbl->vdd = 1100000;
 				if (tbl->a11clk_khz == 1008000)
 					tbl->vdd = 1100000;
@@ -771,12 +809,18 @@ static int __init get_reg(void)
 	drv_state.vreg_cpu = regulator_get(NULL, "vddx_cx");
 
 	if (IS_ERR(drv_state.vreg_cpu)) {
-		res = PTR_ERR(drv_state.vreg_cpu);
-		pr_err("could not get regulator: %d\n", res);
-		BUG_ON(res);
-	}
+	  res = PTR_ERR(drv_state.vreg_cpu);
+	  pr_err("could not get regulator: %d\n", res);
+	  BUG_ON(res);
+        }
 
-	ext_vreg_handle = drv_state.vreg_cpu;
+#ifdef CONFIG_HUAWEI_KERNEL
+    cpu_core_voltage_handle = drv_state.vreg_cpu;
+#else
+	ncp6335d_handle = drv_state.vreg_cpu;
+#endif
+/*rerutn back to qcom 3027*/
+
 
 	return 0;
 }
@@ -891,12 +935,13 @@ static int __devinit acpuclk_8625q_probe(struct platform_device *pdev)
 	}
 
 	drv_state.probe_success = true;
-
+	drv_state.restart_config_done = STATE_NORMAL;
 	return 0;
 }
 
 static struct platform_driver acpuclk_8625q_driver = {
 	.probe = acpuclk_8625q_probe,
+	.shutdown = acpuclk_8625q_restart_config,
 	.driver = {
 		.name = "acpuclock-8625q",
 		.owner = THIS_MODULE,

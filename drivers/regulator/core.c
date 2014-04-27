@@ -3614,6 +3614,17 @@ void *regulator_get_init_drvdata(struct regulator_init_data *reg_init_data)
 }
 EXPORT_SYMBOL_GPL(regulator_get_init_drvdata);
 
+#ifdef CONFIG_HUAWEI_KERNEL
+const char *regulator_get_name(struct regulator *regulator)
+{
+	if (regulator->rdev->desc->name)
+		return regulator->rdev->desc->name;
+	else
+		return "";
+}
+EXPORT_SYMBOL_GPL(regulator_get_name);
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 static ssize_t supply_map_read_file(struct file *file, char __user *user_buf,
 				    size_t count, loff_t *ppos)

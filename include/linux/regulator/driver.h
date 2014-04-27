@@ -226,4 +226,8 @@ int regulator_mode_to_status(unsigned int);
 
 void *regulator_get_init_drvdata(struct regulator_init_data *reg_init_data);
 
+#ifdef CONFIG_HUAWEI_KERNEL
+const char *regulator_get_name(struct regulator *regulator);
+#endif
+
 #endif

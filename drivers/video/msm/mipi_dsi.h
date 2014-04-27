@@ -108,8 +108,11 @@ enum dsi_trigger_type {
 #define DSI_CMD_DST_FORMAT_RGB666	7
 #define DSI_CMD_DST_FORMAT_RGB888	8
 
+/* add qcom patch to work around lcd esd issue */
 #define DSI_INTR_ERROR_MASK		BIT(25)
 #define DSI_INTR_ERROR			BIT(24)
+#define DSI_INTR_BTA_DONE_MASK		BIT(21)
+#define DSI_INTR_BTA_DONE		BIT(20)
 #define DSI_INTR_VIDEO_DONE_MASK	BIT(17)
 #define DSI_INTR_VIDEO_DONE		BIT(16)
 #define DSI_INTR_CMD_MDP_DONE_MASK	BIT(9)
@@ -118,6 +121,7 @@ enum dsi_trigger_type {
 #define DSI_INTR_CMD_DMA_DONE		BIT(0)
 
 #define DSI_MDP_TERM	BIT(8)
+#define DSI_BTA_TERM	BIT(1)
 #define DSI_CMD_TERM	BIT(0)
 
 #define DSI_CMD_TRIGGER_NONE		0x0	/* mdp trigger */
@@ -306,6 +310,8 @@ void mipi_dsi_cmd_mdp_start(void);
 int mipi_dsi_ctrl_lock(int mdp);
 int mipi_dsi_ctrl_lock_query(void);
 void mipi_dsi_cmd_bta_sw_trigger(void);
+/* add qcom patch to work around lcd esd issue */
+int mipi_dsi_wait_for_bta_ack(void);
 void mipi_dsi_ack_err_status(void);
 void mipi_dsi_set_tear_on(struct msm_fb_data_type *mfd);
 void mipi_dsi_set_tear_off(struct msm_fb_data_type *mfd);

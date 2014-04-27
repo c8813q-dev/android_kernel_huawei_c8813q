@@ -696,6 +696,7 @@ static struct regulator_init_data ncp6335d_init_data = {
 	.consumer_supplies = ncp6335d_consumer_supplies,
 };
 
+/*rerutn back to qcom 3027*/
 static struct ncp6335d_platform_data ncp6335d_pdata = {
 	.init_data = &ncp6335d_init_data,
 	.default_vsel = NCP6335D_VSEL0,
@@ -1241,7 +1242,8 @@ static void __init msm_qrd_init(void)
 				ARRAY_SIZE(i2c2_info));
 
 #if defined(CONFIG_BT) && defined(CONFIG_MARIMBA_CORE)
-	msm7627a_bt_power_init();
+    /* qcomm QRD phone concerned not need by hw product*/
+	//msm7627a_bt_power_init();
 #endif
 
 	msm7627a_camera_init();

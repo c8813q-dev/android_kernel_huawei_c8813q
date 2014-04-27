@@ -28,7 +28,9 @@
 #include <linux/spinlock.h>
 
 #include <linux/fb.h>
-
+#ifdef CONFIG_HUAWEI_KERNEL
+#include <linux/hardware_self_adapt.h>
+#endif
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
@@ -51,6 +53,7 @@ extern uint32 mdp_intr_mask;
 int first_pixel_start_x;
 int first_pixel_start_y;
 
+/* add qcom patch to work around lcd esd issue */
 static ssize_t vsync_show_event(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -62,7 +65,8 @@ static ssize_t vsync_show_event(struct device *dev,
 
 	INIT_COMPLETION(vsync_cntrl.vsync_wait);
 
-	wait_for_completion(&vsync_cntrl.vsync_wait);
+	if (!wait_for_completion_timeout(&vsync_cntrl.vsync_wait, HZ/10))
+		pr_err("Timedout DMA %s %d", __func__, __LINE__);
 	ret = snprintf(buf, PAGE_SIZE, "VSYNC=%llu",
 	ktime_to_ns(vsync_cntrl.vsync_time));
 	buf[strlen(buf) + 1] = '\0';
@@ -122,6 +126,10 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	int ret;
 	uint32_t mask, curr;
 
+#ifdef CONFIG_HUAWEI_KERNEL
+	lcd_panel_type lcdtype = LCD_NONE;
+	lcd_align_type lcd_align = LCD_PANEL_ALIGN_LSB;
+#endif
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
 	if (!mfd)
@@ -143,7 +151,19 @@ int mdp_lcdc_on(struct platform_device *pdev)
 
 	buf += calc_fb_offset(mfd, fbi, bpp);
 
-	dma2_cfg_reg = DMA_PACK_ALIGN_LSB | DMA_OUT_SEL_LCDC;
+#ifdef CONFIG_HUAWEI_KERNEL
+    lcd_align = get_lcd_align_type();
+    if(lcd_align == LCD_PANEL_ALIGN_MSB)
+    {
+          dma2_cfg_reg = DMA_PACK_ALIGN_MSB| DMA_OUT_SEL_LCDC;
+    }
+    else
+    {
+         dma2_cfg_reg = DMA_PACK_ALIGN_LSB | DMA_OUT_SEL_LCDC;
+    }
+#else
+    dma2_cfg_reg = DMA_PACK_ALIGN_LSB | DMA_OUT_SEL_LCDC;
+#endif
 
 	if (mfd->fb_imgType == MDP_BGR_565)
 		dma2_cfg_reg |= DMA_PACK_PATTERN_BGR;
@@ -311,7 +331,16 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		MDP_OUTP(MDP_BASE + timer_base + 0x38, active_v_end);
 	}
 
+#ifdef CONFIG_HUAWEI_KERNEL
+	ret = 0;
+    lcdtype = get_lcd_panel_type();
+	if( (LCD_HX8357C_TIANMA_HVGA != lcdtype )&&(LCD_HX8357B_TIANMA_HVGA != lcdtype ))
+	{
+		ret = panel_next_on(pdev);
+	}
+#else
 	ret = panel_next_on(pdev);
+#endif
 	if (ret == 0) {
 		/* enable LCDC block */
 		MDP_OUTP(MDP_BASE + timer_base, 1);
@@ -319,6 +348,16 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	}
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+
+#ifdef CONFIG_HUAWEI_KERNEL
+	/*need to send 2 frame pclk data before sending sleep out command*/
+	if( (LCD_HX8357C_TIANMA_HVGA == lcdtype )||(LCD_HX8357B_TIANMA_HVGA == lcdtype ))
+	{
+		msleep(50);
+		ret = panel_next_on(pdev);
+	}
+#endif
+/* delete some line */
 
 	if (!vsync_cntrl.sysfs_created) {
 		ret = sysfs_create_group(&vsync_cntrl.dev->kobj,
@@ -355,15 +394,20 @@ int mdp_lcdc_off(struct platform_device *pdev)
 #endif
 	mdp_histogram_ctrl_all(FALSE);
 
-	down(&mfd->dma->mutex);
+/*still need to send 2 frame data after sending sleep in command*/
+#ifdef CONFIG_HUAWEI_KERNEL
+	ret = panel_next_off(pdev);
+#endif
+    down(&mfd->dma->mutex);
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	MDP_OUTP(MDP_BASE + timer_base, 0);
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_pipe_ctrl(block, MDP_BLOCK_POWER_OFF, FALSE);
-
+#ifndef CONFIG_HUAWEI_KERNEL
 	ret = panel_next_off(pdev);
+#endif
 	up(&mfd->dma->mutex);
 	atomic_set(&vsync_cntrl.suspend, 1);
 	atomic_set(&vsync_cntrl.vsync_resume, 0);
@@ -375,6 +419,7 @@ int mdp_lcdc_off(struct platform_device *pdev)
 	return ret;
 }
 
+/* merge qcom patch to solve blue screen when power on */
 void mdp_dma_lcdc_vsync_ctrl(int enable)
 {
 	unsigned long flag;
@@ -383,8 +428,7 @@ void mdp_dma_lcdc_vsync_ctrl(int enable)
 		return;
 
 	spin_lock_irqsave(&mdp_spin_lock, flag);
-	if (!enable)
-		INIT_COMPLETION(vsync_cntrl.vsync_wait);
+	/* delete two lines */
 
 	vsync_cntrl.vsync_irq_enabled = enable;
 	disabled_clocks = vsync_cntrl.disabled_clocks;
@@ -408,6 +452,7 @@ void mdp_dma_lcdc_vsync_ctrl(int enable)
 		atomic_set(&vsync_cntrl.vsync_resume, 1);
 }
 
+/* add qcom patch to work around lcd esd issue */
 void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 {
 	struct fb_info *fbi = mfd->fbi;
@@ -458,7 +503,8 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 #endif
 	spin_unlock_irqrestore(&mdp_spin_lock, flag);
-	wait_for_completion_killable(&mfd->dma->comp);
+	if (wait_for_completion_killable_timeout(&mfd->dma->comp, HZ/10) <= 0)
+		pr_err("DMA_P timedout: %s %i", __func__, __LINE__);
 	mdp_disable_irq(irq_block);
 	up(&mfd->dma->mutex);
 }

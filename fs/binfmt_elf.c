@@ -1903,6 +1903,161 @@ static size_t elf_core_vma_data_size(struct vm_area_struct *gate_vma,
 	return size;
 }
 
+extern char core_pattern[];
+extern char *mangle_path(char *s, char *p, char *esc);
+static int pad_len_spaces(char *m, int len)
+{
+    len = 25 + sizeof(void*) * 6 - len;
+    if (len < 1)
+        len = 1;
+    return sprintf(m, "%*c", len, ' ');
+}
+
+static void show_map_vma(struct file *m, struct vm_area_struct *vma)
+{
+    struct mm_struct *mm = vma->vm_mm;
+    struct file *file = vma->vm_file;
+    vm_flags_t flags = vma->vm_flags;
+    unsigned long ino = 0;
+    unsigned long long pgoff = 0;
+    unsigned long start, end;
+    dev_t dev = 0;
+    int len;
+    char b[200];
+    char * buf = b;
+    char * buf_orig = b;
+
+    if (file) {
+        struct inode *inode = vma->vm_file->f_path.dentry->d_inode;
+        dev = inode->i_sb->s_dev;
+        ino = inode->i_ino;
+        pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+    }
+
+    /* We don't show the stack guard page in /proc/maps */
+    start = vma->vm_start;
+    if (stack_guard_page_start(vma, start))
+        start += PAGE_SIZE;
+    end = vma->vm_end;
+    if (stack_guard_page_end(vma, end))
+        end -= PAGE_SIZE;
+
+    //seq_printf(m, "%08lx-%08lx %c%c%c%c %08llx %02x:%02x %lu %n",
+    buf += sprintf(buf, "%08lx-%08lx %08lx %c%c%c%c %08llx %02x:%02x %lu %n",
+            start,
+            end,
+            flags,
+            flags & VM_READ ? 'r' : '-',
+            flags & VM_WRITE ? 'w' : '-',
+            flags & VM_EXEC ? 'x' : '-',
+            flags & VM_MAYSHARE ? 's' : 'p',
+            pgoff,
+            MAJOR(dev), MINOR(dev), ino, &len);
+
+    /*
+     * Print the dentry name for named mappings, and a
+     * special [heap] marker for the heap:
+     */
+    if (file) {
+        char *p;
+        char pbuf[100];
+        char *pend;
+        buf += pad_len_spaces(buf, len);
+        //seq_path(m, &file->f_path, "\n");
+        p = d_path(&file->f_path, pbuf, 100);
+        if (!IS_ERR(p)) {
+            mangle_path(pbuf, p, "\n");
+            pend = mangle_path(pbuf, p, "\n");
+            if (pend)
+                *pend = '\0';
+        }
+        buf += sprintf(buf, "%s", pbuf);
+    } else {
+        const char *name = arch_vma_name(vma);
+        if (!name) {
+            if (mm) {
+                if (vma->vm_start <= mm->brk &&
+                        vma->vm_end >= mm->start_brk) {
+                    name = "[heap]";
+                } else if (vma->vm_start <= mm->start_stack &&
+                       vma->vm_end >= mm->start_stack) {
+                    name = "[stack]";
+                }
+            } else {
+                name = "[vdso]";
+            }
+        }
+        if (name) {
+            buf += pad_len_spaces(buf, len);
+            buf += sprintf( buf, "%s", name );
+        }
+    }
+    buf += sprintf(buf, "%c", '\n');
+    dump_write( m, buf_orig, buf-buf_orig ); 
+}
+
+static void store_memmap(void)
+{
+    char map_file_name[128] = {0}; 
+    struct vm_area_struct *vma, *gate_vma;
+    mm_segment_t fs;
+    struct file * map_file;
+    struct inode *inode;
+    int flag = 0;
+    char * p = NULL;
+    struct timeval tv;
+
+    do_gettimeofday(&tv);
+    strcpy(map_file_name, core_pattern);
+    p = strrchr(map_file_name, '/');
+    sprintf(p + 1, "%s-%d(%d)-%lu.maps", current->comm, task_tgid_vnr(current), task_pid_nr(current), tv.tv_sec);
+    map_file = filp_open(map_file_name,
+            O_CREAT | 2 | O_NOFOLLOW | O_LARGEFILE | flag,
+            0600);
+    if (IS_ERR(map_file))
+    {
+        return;
+    }
+
+    inode = map_file->f_path.dentry->d_inode;
+    if (inode->i_nlink > 1)
+        goto close_fail;
+    if (d_unhashed(map_file->f_path.dentry))
+        goto close_fail;
+    /*
+     * AK: actually i see no reason to not allow this for named
+     * pipes etc, but keep the previous behaviour for now.
+     */
+    if (!S_ISREG(inode->i_mode))
+        goto close_fail;
+    /*
+     * Dont allow local users get cute and trick others to coredump
+     * into their pre-created files.
+     */
+    if (inode->i_uid != current_fsuid())
+        goto close_fail;
+    if (!map_file->f_op || !map_file->f_op->write)
+        goto close_fail;
+    if (do_truncate(map_file->f_path.dentry, 0, 0, map_file))
+        goto close_fail;
+    
+    fs = get_fs();
+    set_fs(KERNEL_DS);
+    gate_vma = get_gate_vma(current->mm);
+    /* Write program headers for segments dump */
+    for (vma = first_vma(current, gate_vma); vma != NULL; vma = next_vma(vma, gate_vma))
+    {
+        show_map_vma(map_file, vma);
+    }
+    set_fs(fs);
+    
+close_fail:
+    if (map_file)
+    {
+        filp_close(map_file, NULL);
+    }
+}
+
 /*
  * Actual dumper
  *
@@ -2093,7 +2248,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 
 end_coredump:
 	set_fs(fs);
-
+	store_memmap();
 cleanup:
 	free_note_info(&info);
 	kfree(shdr4extnum);

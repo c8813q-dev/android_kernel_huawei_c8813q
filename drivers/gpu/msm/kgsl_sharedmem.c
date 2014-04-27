@@ -355,9 +355,14 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		vunmap(memdesc->hostptr);
 		kgsl_driver.stats.vmalloc -= memdesc->size;
 	}
-	if (memdesc->sg)
+	if (memdesc->sg) {
 		for_each_sg(memdesc->sg, sg, sglen, i)
+		{
+			if (sg->length == 0)
+				break;
 			__free_page(sg_page(sg));
+		}
+	}
 }
 
 static int kgsl_contiguous_vmflags(struct kgsl_memdesc *memdesc)
@@ -509,8 +514,9 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 	memdesc->priv = KGSL_MEMFLAGS_CACHED;
 	memdesc->ops = &kgsl_page_alloc_ops;
 
-	memdesc->sg = kgsl_sg_alloc(sglen);
-
+	memdesc->sglen = sglen;
+	memdesc->sg = kgsl_sg_alloc(memdesc->sglen);
+	
 	if (memdesc->sg == NULL) {
 		KGSL_CORE_ERR("vmalloc(%d) failed\n",
 			sglen * sizeof(struct scatterlist));
@@ -525,8 +531,8 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 	 * two pages; well within the acceptable limits for using kmalloc.
 	 */
 
-	pages = kmalloc(sglen * sizeof(struct page *), GFP_KERNEL);
-
+	pages = kmalloc(memdesc->sglen * sizeof(struct page *), GFP_KERNEL);
+	
 	if (pages == NULL) {
 		KGSL_CORE_ERR("kmalloc (%d) failed\n",
 			sglen * sizeof(struct page *));
@@ -536,9 +542,8 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 
 	kmemleak_not_leak(memdesc->sg);
 
-	memdesc->sglen = sglen;
-	sg_init_table(memdesc->sg, sglen);
-
+	sg_init_table(memdesc->sg, memdesc->sglen);
+	
 	for (i = 0; i < PAGE_ALIGN(size) / PAGE_SIZE; i++) {
 
 		/*
@@ -549,7 +554,6 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 		pages[i] = alloc_page(GFP_KERNEL | __GFP_HIGHMEM);
 		if (pages[i] == NULL) {
 			ret = -ENOMEM;
-			memdesc->sglen = i;
 			goto done;
 		}
 
