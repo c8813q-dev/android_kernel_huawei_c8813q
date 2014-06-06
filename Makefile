@@ -4,6 +4,9 @@ SUBLEVEL = 0
 EXTRAVERSION =
 NAME = Saber-toothed Squirrel
 
+#for bluetooth
+export ENABLE_BLUEZ_VER30=true
+
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
 # More info can be located in ./README
