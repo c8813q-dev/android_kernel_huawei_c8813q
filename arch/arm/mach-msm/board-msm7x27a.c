@@ -1032,8 +1032,10 @@ static void fix_sizes(void)
 		printk("pmem_adsp_size=%08x\n",pmem_adsp_size);
 	}
 
+#if 0
 	if (get_ddr_size() > SZ_512M)
 		pmem_adsp_size = CAMERA_ZSL_SIZE;
+#endif
 
 #ifdef CONFIG_ION_MSM
 	msm_ion_audio_size = MSM_PMEM_AUDIO_SIZE;
