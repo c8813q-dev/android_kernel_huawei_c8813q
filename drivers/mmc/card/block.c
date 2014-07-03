@@ -1221,8 +1221,6 @@ static int mmc_blk_err_check(struct mmc_card *card,
 	if (!mmc_host_is_spi(card->host) && rq_data_dir(req) != READ) {
 		/*when SD card has not been ready in response to CMD13 ,reset card after 2s*/
 		int i = 0;
-		unsigned long timeout = jiffies + HZ * SEND_STATUS_TIMEOUT;
-		u32 status;
 		unsigned long timeout;
 
 		timeout = jiffies + msecs_to_jiffies(MMC_BLK_TIMEOUT_MS);
