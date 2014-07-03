@@ -23,6 +23,7 @@
 int csi_config=0;
 bool standby_mode=false;
 int is_first_preview_frame =1;
+
 /*=============================================================*/
 void msm_sensor_adjust_frame_lines1(struct msm_sensor_ctrl_t *s_ctrl)
 {
@@ -90,14 +91,17 @@ static void msm_sensor_delay_frames(struct msm_sensor_ctrl_t *s_ctrl)
 
 	if (s_ctrl->curr_res < MSM_SENSOR_INVALID_RES &&
 		s_ctrl->wait_num_frames > 0) {
-		fps = s_ctrl->msm_sensor_reg->
-			output_settings[s_ctrl->curr_res].vt_pixel_clk /
-			s_ctrl->curr_frame_length_lines /
-			s_ctrl->curr_line_length_pclk;
-		if (fps == 0)
-			delay = s_ctrl->min_delay;
-		else
-			delay = (1000 * s_ctrl->wait_num_frames) / fps / Q10;
+		if(s_ctrl->curr_frame_length_lines && s_ctrl->curr_line_length_pclk)
+			fps = s_ctrl->msm_sensor_reg->
+				output_settings[s_ctrl->curr_res].vt_pixel_clk /
+				s_ctrl->curr_frame_length_lines /
+				s_ctrl->curr_line_length_pclk;
+        if(0 != fps)
+        {
+         	delay = 1000 / fps;
+        }
+        else
+            delay = 150;
 	}
 	CDBG("%s fps = %ld, delay = %d, min_delay %d\n", __func__, fps,
 		delay, s_ctrl->min_delay);
@@ -282,7 +286,6 @@ int32_t msm_sensor_setting1(struct msm_sensor_ctrl_t *s_ctrl,
 		CDBG("Register INIT\n");
 		msm_sensor_enable_debugfs(s_ctrl);
 		s_ctrl->func_tbl->sensor_stop_stream(s_ctrl);
-		msm_sensor_write_init_settings(s_ctrl);
 		/*uesd to write special initialization arrays of some sensors*/
 		/* standby mode only write init setting one time */
         if(false == s_ctrl->sensordata->standby_is_supported)
@@ -585,20 +588,6 @@ int32_t msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 				sizeof(struct sensor_cfg_data)))
 				rc = -EFAULT;
 			break;
-        case CFG_OTP_READING:
-			if(s_ctrl->func_tbl->sensor_otp_reading == NULL)
-			{
-				rc = -EFAULT;
-				return rc;
-			}
-
-			rc = s_ctrl->func_tbl->sensor_otp_reading(&cdata);
-
-			if (copy_to_user((void *)argp,
-				&cdata,
-				sizeof(struct sensor_cfg_data)))
-				rc = -EFAULT;
-			break;
 
 		case CFG_START_STREAM:
 			if (s_ctrl->func_tbl->sensor_start_stream == NULL) {
@@ -624,6 +613,21 @@ int32_t msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 			rc = s_ctrl->func_tbl->sensor_get_csi_params(
 				s_ctrl,
 				&cdata.cfg.csi_lane_params);
+
+			if (copy_to_user((void *)argp,
+				&cdata,
+				sizeof(struct sensor_cfg_data)))
+				rc = -EFAULT;
+			break;
+
+        case CFG_OTP_READING:
+			if(s_ctrl->func_tbl->sensor_otp_reading == NULL)
+			{
+				rc = -EFAULT;
+				return rc;
+			}
+
+			rc = s_ctrl->func_tbl->sensor_otp_reading(&cdata);
 
 			if (copy_to_user((void *)argp,
 				&cdata,
@@ -678,6 +682,10 @@ static struct msm_cam_clk_info cam_8960_clk_info[] = {
 static struct msm_cam_clk_info cam_8974_clk_info[] = {
 	{"cam_src_clk", 19200000},
 	{"cam_clk", -1},
+};
+
+static struct msm_cam_clk_info cam_clk_info[] = {
+	{"cam_clk", MSM_SENSOR_MCLK_24HZ},
 };
 
 int32_t msm_sensor_enable_i2c_mux(struct msm_camera_i2c_conf *i2c_conf)
@@ -1576,19 +1584,23 @@ int32_t msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
         || (0 == strcmp(data->sensor_name, ""))
         || (false == standby_mode))
     {
-    	rc = msm_camera_config_vreg(&s_ctrl->sensor_i2c_client->client->dev,
-    			s_ctrl->sensordata->sensor_platform_info->cam_vreg,
-    			s_ctrl->sensordata->sensor_platform_info->num_vreg,
-    			s_ctrl->reg_ptr, 1);
+    	rc = msm_camera_config_vreg(dev,
+		s_ctrl->sensordata->sensor_platform_info->cam_vreg,
+		s_ctrl->sensordata->sensor_platform_info->num_vreg,
+		s_ctrl->vreg_seq,
+		s_ctrl->num_vreg_seq,
+		s_ctrl->reg_ptr, 1);
     	if (rc < 0) {
     		pr_err("%s: regulator on failed\n", __func__);
     		goto config_vreg_failed;
     	}
 
-    	rc = msm_camera_enable_vreg(&s_ctrl->sensor_i2c_client->client->dev,
-    			s_ctrl->sensordata->sensor_platform_info->cam_vreg,
-    			s_ctrl->sensordata->sensor_platform_info->num_vreg,
-    			s_ctrl->reg_ptr, 1);
+    	rc = msm_camera_enable_vreg(dev,
+		s_ctrl->sensordata->sensor_platform_info->cam_vreg,
+		s_ctrl->sensordata->sensor_platform_info->num_vreg,
+		s_ctrl->vreg_seq,
+		s_ctrl->num_vreg_seq,
+		s_ctrl->reg_ptr, 1);
     	if (rc < 0) {
     		pr_err("%s: enable regulator failed\n", __func__);
     		goto enable_vreg_failed;
@@ -1696,12 +1708,6 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 
 	if (data->sensor_platform_info->ext_power_ctrl != NULL)
 		data->sensor_platform_info->ext_power_ctrl(0);
-	if (s_ctrl->sensor_device_type == MSM_SENSOR_I2C_DEVICE)
-		msm_cam_clk_enable(dev, cam_8960_clk_info, s_ctrl->cam_clk,
-			ARRAY_SIZE(cam_8960_clk_info), 0);
-	else
-		msm_cam_clk_enable(dev, cam_8974_clk_info, s_ctrl->cam_clk,
-			ARRAY_SIZE(cam_8974_clk_info), 0);
     /* move the mclk disable backward */
 	msm_camera_config_gpio_table(data, 0);
 	msm_cam_clk_enable(&s_ctrl->sensor_i2c_client->client->dev,
@@ -1711,13 +1717,13 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
         || (0 == strcmp(data->sensor_name, ""))
         || (false == standby_mode))
     {
-	msm_camera_enable_vreg(dev,
+    	msm_camera_enable_vreg(dev,
 		s_ctrl->sensordata->sensor_platform_info->cam_vreg,
 		s_ctrl->sensordata->sensor_platform_info->num_vreg,
 		s_ctrl->vreg_seq,
 		s_ctrl->num_vreg_seq,
 		s_ctrl->reg_ptr, 0);
-	msm_camera_config_vreg(dev,
+    	msm_camera_config_vreg(dev,
 		s_ctrl->sensordata->sensor_platform_info->cam_vreg,
 		s_ctrl->sensordata->sensor_platform_info->num_vreg,
 		s_ctrl->vreg_seq,
@@ -1802,6 +1808,7 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 		pr_err("%s %s NULL sensor data\n", __func__, client->name);
 		return -EFAULT;
 	}
+
     if(s_ctrl->sensordata->get_camera_vreg)
     {
 	    s_ctrl->sensordata->get_camera_vreg(s_ctrl->sensordata->sensor_platform_info);
@@ -1822,6 +1829,7 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 		rc = msm_sensor_match_id(s_ctrl);
 	if (rc < 0)
 		goto probe_fail;
+
 	/*the codes below are to set the camera sensor name for project menu*/
 	if(s_ctrl->func_tbl->sensor_model_match)
 		rc = s_ctrl->func_tbl->sensor_model_match(s_ctrl);
@@ -1869,6 +1877,7 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
 	msm_sensor_register(&s_ctrl->sensor_v4l2_subdev);
 	s_ctrl->sensor_v4l2_subdev.entity.revision =
 		s_ctrl->sensor_v4l2_subdev.devnode->num;
+
     if(s_ctrl->sensordata->standby_is_supported)
     {
         if(s_ctrl->func_tbl->sensor_write_init_settings)
@@ -1887,6 +1896,7 @@ int32_t msm_sensor_i2c_probe(struct i2c_client *client,
     /*remove the mclk_self_adapt and put it before sensor power up*/
 #endif
 	//remove lines
+
 	goto power_down;
 probe_fail:
 	pr_err("%s %s_i2c_probe failed\n", __func__, client->name);
@@ -1894,11 +1904,8 @@ power_down:
 	if (rc > 0)
 		rc = 0;
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
-
     mdelay(10);
-
 	s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
-
 	return rc;
 }
 

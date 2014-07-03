@@ -49,7 +49,6 @@
 
 static void hci_le_connect(struct hci_conn *conn)
 {
-	struct *le_wlist_conn;
 	struct hci_dev *hdev = conn->hdev;
 	struct hci_cp_le_create_conn cp;
 
@@ -63,10 +62,6 @@ static void hci_le_connect(struct hci_conn *conn)
 
 	memset(&cp, 0, sizeof(cp));
 
-	if (!bacmp(&le->dst, BDADDR_ANY)) {
-		cp.filter_policy = 0x01;
-		le->conn_timeout = 0;
-	} else {
 	cp.scan_interval = cpu_to_le16(0x0004);
 	cp.scan_window = cpu_to_le16(0x0004);
 	bacpy(&cp.peer_addr, &conn->dst);
@@ -76,7 +71,6 @@ static void hci_le_connect(struct hci_conn *conn)
 	cp.supervision_timeout = cpu_to_le16(0x0064);
 	cp.min_ce_len = cpu_to_le16(0x0001);
 	cp.max_ce_len = cpu_to_le16(0x0001);
-	}
 
 	hci_send_cmd(hdev, HCI_OP_LE_CREATE_CONN, sizeof(cp), &cp);
 }

@@ -1625,21 +1625,6 @@ struct sensor_oem_setting {
 	void *data;
 };
 
-enum camera_vreg_type {
-	REG_LDO,
-	REG_VS,
-	REG_GPIO,
-};
-
-struct camera_vreg_t {
-	const char *reg_name;
-	enum camera_vreg_type type;
-	int min_voltage;
-	int max_voltage;
-	int op_mode;
-	uint32_t delay;
-};
-
 struct msm_camera_vreg_setting {
 	struct camera_vreg_t *cam_vreg;
 	uint16_t num_vreg;

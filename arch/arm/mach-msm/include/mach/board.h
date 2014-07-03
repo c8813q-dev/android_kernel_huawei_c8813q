@@ -227,6 +227,21 @@ enum msm_camera_vreg_name_t {
 	CAM_VAF,
 };
 
+enum camera_vreg_type {
+	REG_LDO,
+	REG_VS,
+	REG_GPIO,
+};
+
+struct camera_vreg_t {
+	char *reg_name;
+	enum camera_vreg_type type;
+	int min_voltage;
+	int max_voltage;
+	int op_mode;
+	int delay;
+};
+
 struct msm_camera_sensor_platform_info {
 	int mount_angle;
 	int sensor_reset;

@@ -80,20 +80,6 @@ void l2cap_sock_clear_timer(struct sock *sk)
 	sk_stop_timer(sk, &sk->sk_timer);
 }
 
-int l2cap_sock_le_conn_update_params_valid(struct bt_le_params *le_params)
-{
-	if (!le_params || le_params->latency > BT_LE_LATENCY_MAX ||
-			le_params->interval_min < BT_LE_CONN_INTERVAL_MIN ||
-			le_params->interval_max > BT_LE_CONN_INTERVAL_MAX ||
-			le_params->interval_min > le_params->interval_max ||
-			le_params->supervision_timeout < BT_LE_SUP_TO_MIN ||
-			le_params->supervision_timeout > BT_LE_SUP_TO_MAX) {
-		return 0;
-	}
-
-	return 1;
-}
-
 static struct sock *__l2cap_get_sock_by_addr(__le16 psm, bdaddr_t *src)
 {
 	struct sock *sk;

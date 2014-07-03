@@ -1222,7 +1222,7 @@ static int mmc_blk_err_check(struct mmc_card *card,
 		/*when SD card has not been ready in response to CMD13 ,reset card after 2s*/
 		int i = 0;
 		unsigned long timeout;
-
+		u32 status;
 		timeout = jiffies + msecs_to_jiffies(MMC_BLK_TIMEOUT_MS);
 		do {
 			int err = get_card_status(card, &status, 5);

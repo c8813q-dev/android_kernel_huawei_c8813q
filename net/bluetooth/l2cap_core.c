@@ -90,7 +90,6 @@ static int l2cap_answer_move_poll(struct sock *sk);
 static int l2cap_create_cfm(struct hci_chan *chan, u8 status);
 static int l2cap_deaggregate(struct hci_chan *chan, struct l2cap_pinfo *pi);
 static void l2cap_chan_ready(struct sock *sk);
-static void l2cap_conn_del(struct hci_conn *hcon, int err);
 static void l2cap_queue_acl_data(struct work_struct *worker);
 static void l2cap_queue_smp_data(struct work_struct *worker);
 static struct att_channel_parameters{
@@ -7166,16 +7165,7 @@ static inline int l2cap_att_channel(struct l2cap_conn *conn, __le16 cid, struct 
 	BT_DBG("sk %p, len %d", sk, skb->len);
 
 	if (sk->sk_state != BT_BOUND && sk->sk_state != BT_CONNECTED) {
-		att_chn_params.cid = cid;
-		att_chn_params.conn = conn;
-		att_chn_params.dir = dir;
-		att_chn_params.skb = skb;
-		open_worker = kzalloc(sizeof(*open_worker), GFP_ATOMIC);
-		if (!open_worker)
-			BT_ERR("Out of memory");
-		INIT_WORK(open_worker, l2cap_queue_acl_data);
-		schedule_work(open_worker);
-		goto done;
+		goto drop;
 	}
 
 	if (l2cap_pi(sk)->imtu < skb->len)

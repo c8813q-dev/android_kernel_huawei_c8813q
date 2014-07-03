@@ -985,9 +985,5 @@ int mdp4_wfd_pipe_commit(struct msm_fb_data_type *mfd, int cndx, int wait);
 int mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd);
 #else
 static inline void mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd);
-{
-	/* empty */
-	return 0;
-}
 #endif
 #endif /* MDP_H */

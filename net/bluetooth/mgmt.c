@@ -1553,7 +1553,7 @@ static int le_create_conn_white_list(struct sock *sk, u16 index)
 	sec_level = BT_SECURITY_MEDIUM;
 	auth_type = HCI_AT_GENERAL_BONDING;
 	memset(&bdaddr, 0, sizeof(bdaddr));
-	conn = hci_le_connect(hdev, 0, BDADDR_ANY, sec_level, auth_type, NULL);
+	conn = hci_connect(hdev, LE_LINK, 0, BDADDR_ANY, sec_level, auth_type);
 	if (IS_ERR(conn)) {
 		err = PTR_ERR(conn);
 		mgmt_pending_remove(cmd);
@@ -2144,9 +2144,6 @@ void mgmt_inquiry_complete_evt(u16 index, u8 status)
 
 	hdev = hci_dev_get(index);
 
-	if (hdev)
-		BT_DBG("disco_state: %d", hdev->disco_state);
-
 	if (!hdev || !lmp_le_capable(hdev)) {
 		struct mgmt_mode cp = {0};
 
@@ -2154,8 +2151,6 @@ void mgmt_inquiry_complete_evt(u16 index, u8 status)
 						discovery_terminated, NULL);
 
 		mgmt_event(MGMT_EV_DISCOVERING, index, &cp, sizeof(cp), NULL);
-
-		hdev->disco_state = SCAN_IDLE;
 
 		if (hdev)
 			goto done;
@@ -2276,7 +2271,6 @@ static int start_discovery(struct sock *sk, u16 index)
 	if (!hdev)
 		return cmd_status(sk, index, MGMT_OP_START_DISCOVERY, ENODEV);
 
-	BT_DBG("disco_state: %d", hdev->disco_state);
 	hci_dev_lock_bh(hdev);
 
 	cmd = mgmt_pending_add(sk, MGMT_OP_START_DISCOVERY, index, NULL, 0);
@@ -2353,8 +2347,6 @@ static int stop_discovery(struct sock *sk, u16 index)
 	hdev = hci_dev_get(index);
 	if (!hdev)
 		return cmd_status(sk, index, MGMT_OP_STOP_DISCOVERY, ENODEV);
-
-	BT_DBG("disco_state: %d", hdev->disco_state);
 
 	hci_dev_lock_bh(hdev);
 
