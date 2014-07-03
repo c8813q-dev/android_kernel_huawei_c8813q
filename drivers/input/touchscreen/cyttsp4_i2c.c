@@ -43,7 +43,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
-#include <cyttsp4_regs.h>
+#include "cyttsp4_regs.h"
 #include <asm/mach-types.h>
 #define CY_I2C_DATA_SIZE  (3 * 256)
 
