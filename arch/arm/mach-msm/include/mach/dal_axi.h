@@ -20,4 +20,5 @@ int set_grp_xbar_async(void);
 int axi_allocate(int mode);
 int axi_free(int mode);
 #define AXI_FLOW_VIEWFINDER_HI	243
+#define AXI_HALT_PORT_VFE	7
 #endif  /* _DAL_AXI_H */

@@ -334,6 +334,28 @@ struct msm_vpe_clock_rate {
 	uint32_t rate;
 };
 
+struct msm_pp_crop {
+	uint32_t  src_x;
+	uint32_t  src_y;
+	uint32_t  src_w;
+	uint32_t  src_h;
+	uint32_t  dst_x;
+	uint32_t  dst_y;
+	uint32_t  dst_w;
+	uint32_t  dst_h;
+	uint8_t update_flag;
+};
+
+struct msm_mctl_pp_frame_cmd {
+	uint32_t cookie;
+	uint8_t  vpe_output_action;
+	uint32_t src_buf_handle;
+	uint32_t dest_buf_handle;
+	struct msm_pp_crop crop;
+	int path;
+	/* TBD: 3D related */
+};
+
 #define MSM_MCTL_PP_VPE_FRAME_ACK    (1<<0)
 #define MSM_MCTL_PP_VPE_FRAME_TO_APP (1<<1)
 

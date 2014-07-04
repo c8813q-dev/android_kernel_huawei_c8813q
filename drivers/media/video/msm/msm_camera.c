@@ -38,7 +38,7 @@
 #ifdef CONFIG_HUAWEI_EVALUATE_POWER_CONSUMPTION 
 #include <mach/msm_battery.h>
 #endif
-#include <linux/msm_ion.h>
+#include <linux/ion.h>
 #include <mach/cpuidle.h>
 DEFINE_MUTEX(ctrl_cmd_lock);
 
@@ -1105,7 +1105,6 @@ static int msm_divert_frame(struct msm_sync *sync,
 		return rc;
 	}
 
-        memset(&(buf.fmain), 0, sizeof(struct msm_frame));
 	buf.fmain.buffer = (unsigned long)pinfo.vaddr;
 	buf.fmain.planar0_off = pinfo.planar0_off;
 	buf.fmain.planar1_off = pinfo.planar1_off;
@@ -1240,7 +1239,7 @@ static int msm_get_stats(struct msm_sync *sync, void __user *arg)
 	}
 
 	rc = 0;
-        memset(&stats, 0, sizeof(stats));
+
 	qcmd = msm_dequeue(&sync->event_q, list_config);
 	if (!qcmd) {
 		/* Should be associated with wait_event
@@ -4012,7 +4011,6 @@ static int msm_sync_init(struct msm_sync *sync,
 
 	pm_qos_add_request(&sync->idle_pm_qos, PM_QOS_CPU_DMA_LATENCY,
 					   PM_QOS_DEFAULT_VALUE);
-
 // J not use wake_lock, so delete here
 #ifdef CONFIG_HUAWEI_KERNEL
     /** do not sleep in camera to help lower the crash probability. qinwei **/
