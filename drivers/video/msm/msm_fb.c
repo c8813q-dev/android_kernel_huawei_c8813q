@@ -2213,6 +2213,7 @@ static int msm_fb_release_all(struct fb_info *info, boolean is_all)
 
 	if (!mfd->ref_cnt) {
 		if (mfd->op_enable) {
+#ifndef CONFIG_HUAWEI_KERNEL
 			if (info->node == 0) {
 				down(&mfd->sem);
 				bl_level = mfd->bl_level;
@@ -2220,6 +2221,7 @@ static int msm_fb_release_all(struct fb_info *info, boolean is_all)
 				unset_bl_level = bl_level;
 				up(&mfd->sem);
 			}
+#endif
 			ret = msm_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 							mfd->op_enable);
 			if (ret != 0) {
@@ -2532,8 +2534,11 @@ static int msm_fb_pan_display_sub(struct fb_var_screeninfo *var,
 #endif
 	mdp_dma_pan_update(info);
 	msm_fb_signal_timeline(mfd);
+
+#ifndef CONFIG_HUAWEI_KERNEL
 	if (mdp4_unmap_sec_resource(mfd))
 		pr_err("%s: unmap secure res failed\n", __func__);
+#endif
 
 	up(&msm_fb_pan_sem);
 
@@ -2582,9 +2587,11 @@ static void msm_fb_commit_wq_handler(struct work_struct *work)
 	complete_all(&mfd->commit_comp);
 	mutex_unlock(&mfd->sync_mutex);
 
+#ifndef CONFIG_HUAWEI_KERNEL
 	if (!bl_updated)
 		schedule_delayed_work(&mfd->backlight_worker,
 					backlight_duration);
+#endif
 }
 
 static int msm_fb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)

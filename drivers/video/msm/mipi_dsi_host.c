@@ -1676,10 +1676,7 @@ void mipi_dsi_cmd_mdp_busy(void)
 		/* wait until DMA finishes the current job */
 		pr_debug("%s: pending pid=%d\n",
 				__func__, current->pid);
-#ifdef CONFIG_HUAWEI_KERNEL
-        wait_for_completion_interruptible_timeout(&mfd->dma->comp, 1 * HZ);
 		wait_for_completion(&dsi_mdp_comp);
-#endif
 	}
 	pr_debug("%s: done pid=%d\n",
 				__func__, current->pid);
