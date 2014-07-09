@@ -715,6 +715,4 @@ void l2cap_amp_logical_complete(int result, struct hci_conn *ampcon,
 
 void l2cap_amp_logical_destroyed(struct hci_conn *ampcon);
 
-static void l2cap_conn_del(struct hci_conn *hcon, int err);
-
 #endif /* __L2CAP_H */
