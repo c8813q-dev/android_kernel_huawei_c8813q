@@ -68,20 +68,17 @@ skip_enable\@:
 .macro DO_CACHE_OPERATION, operation, l2_enable
 	ldr     r2, =l2x0_base_addr
 	ldr	r2, [r2]
-	ldr     r0, =0xffff
+	ldr     r0, =0xff
 	str     r0, [r2, #\operation]
 wait\@:
 	ldr	r0, [r2, #\operation]
-	ldr	r1, =0xffff
+	ldr	r1, =0xff
 	ands    r0, r0, r1
 	bne     wait\@
-l2x_sync\@:
+	dsb
 	mov	r0, #0x0
 	str	r0, [r2, #L2X0_CACHE_SYNC]
-sync\@:
-	ldr	r0, [r2, #L2X0_CACHE_SYNC]
-	ands	r0, r0, #0x1
-	bne	sync\@
+	dsb
 	mov     r1, #\l2_enable
 	str     r1, [r2, #L2X0_CTRL]
 .endm
@@ -152,6 +149,19 @@ skip_suspend\@:
 skip_resume\@:
 .endm
 
+.macro WRITE_SMEM, addr, val
+	ldr     r0, =apps_power_collapse
+	ldr	r0, [r0]
+	cmp     r0, #POWER_COLLAPSED
+	bne	dont_write_smem
+	ldr	r0, =\addr
+	ldr	r0, [r0]
+	mov	r1, #\val
+	/* write to "reserved1" field in "msm_pm_smem_t" structure */
+	str	r1, [r0, #0xC]
+dont_write_smem:
+.endm
+
 .macro MARKER, addr, spc_val, pc_val, on
 	.if \on
 	stmfd   sp!, {r5, r6}
@@ -194,4 +204,93 @@ exit\@:
 	.if \on
 	ldmfd   sp!, {r5, r6}
 	.endif
+.endm
+
+.macro	DUMP_SPM_REG, addr
+	stmfd	sp!, {r4, r5, r6}
+	ldr     r4, =target_type
+	ldr     r4, [r4]
+	mov     r5, #TARGET_IS_8625
+	cmp     r4, r5
+	ldr     r5, =\addr
+	ldr     r5, [r5]	/* marker base */
+	bne     log_apps_pwrdown\@
+
+	mrc     p15, 0, r4, c0, c0, 5
+	and     r4, r4, #0x3	/* core number */
+
+	teq     r4, #0x1
+	beq     core1\@
+	teq     r4, #0x2
+	beq     core2\@
+	teq     r4, #0x3
+	beq     core3\@
+
+	/*
+	 * SAW2_CFG (0x8)
+	 */
+	ldr	r4, =spm0_base_addr
+	ldr	r4, [r4]
+	ldr	r6, [r4, #0x8]
+	str	r6, [r5, #0x50]
+	/*
+	 * SAW2_SPM_CTL (0x20)
+	 */
+	ldr     r6, [r4, #0x20]
+	str     r6, [r5, #0x54]
+	b	log_apps_pwrdown\@
+core1\@:
+	/*
+	 * SAW2_CFG (0x8)
+	 */
+	ldr	r4, =spm1_base_addr
+	ldr	r4, [r4]
+	ldr	r6, [r4, #0x8]
+	str	r6, [r5, #0x60]
+	/*
+	 * SAW2_SPM_CTL (0x20)
+	 */
+	ldr	r6, [r4, #0x20]
+	str	r6, [r5, #0x64]
+	b	exit\@
+
+core2\@:
+	/*
+	 * SAW2_CFG (0x8)
+	 */
+	ldr	r4, =spm2_base_addr
+	ldr	r4, [r4]
+	ldr	r6, [r4, #0x8]
+	str	r6, [r5, #0x70]
+	/*
+	 * SAW2_SPM_CTL (0x20)
+	 */
+	ldr     r6, [r4, #0x20]
+	str     r6, [r5, #0x74]
+	b	exit\@
+core3\@:
+	/*
+	 * SAW2_CFG (0x8)
+	 */
+	ldr	r4, =spm3_base_addr
+	ldr     r4, [r4]
+	ldr     r6, [r4, #0x8]
+	str	r6, [r5, #0x80]
+
+	/*
+	 * SAW2_SPM_CTL (0x20)
+	 */
+	ldr     r6, [r4, #0x20]
+	str     r6, [r5, #0x84]
+	b	exit\@
+log_apps_pwrdown\@:
+	/*
+	 * APPS_PWRDOWN
+	 */
+	ldr     r4, =apps_pwr_dwn
+	ldr     r4, [r4]
+	ldr     r4, [r4]
+	str     r4, [r5, #0x58]
+exit\@:
+	ldmfd	sp!, {r4, r5, r6}
 .endm

@@ -390,9 +390,7 @@ int mmc_queue_suspend(struct mmc_queue *mq)
 			spin_unlock_irqrestore(q->queue_lock, flags);
 			rc = -EBUSY;
 		}
-		
 	}
-	
 	return rc;
 }
 

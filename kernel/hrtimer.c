@@ -60,7 +60,8 @@
  */
 DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 {
-    .lock = __RAW_SPIN_LOCK_UNLOCKED(hrtimer_bases.lock),
+
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(hrtimer_bases.lock),
 	.clock_base =
 	{
 		{
@@ -640,7 +641,7 @@ static inline void hrtimer_init_hres(struct hrtimer_cpu_base *base)
  * and expiry check is done in the hrtimer_interrupt or in the softirq.
  */
 static inline int hrtimer_enqueue_reprogram(struct hrtimer *timer,
-						struct hrtimer_clock_base *base)
+					    struct hrtimer_clock_base *base)
 {
 	return base->cpu_base->hres_active && hrtimer_reprogram(timer, base);
 }
@@ -713,7 +714,7 @@ static inline int hrtimer_switch_to_hres(void) { return 0; }
 static inline void
 hrtimer_force_reprogram(struct hrtimer_cpu_base *base, int skip_equal) { }
 static inline int hrtimer_enqueue_reprogram(struct hrtimer *timer,
-						struct hrtimer_clock_base *base)
+					    struct hrtimer_clock_base *base)
 {
 	return 0;
 }
@@ -1618,7 +1619,6 @@ static void __cpuinit init_hrtimers_cpu(int cpu)
 {
 	struct hrtimer_cpu_base *cpu_base = &per_cpu(hrtimer_bases, cpu);
 	int i;
-
 
 	for (i = 0; i < HRTIMER_MAX_CLOCK_BASES; i++) {
 		cpu_base->clock_base[i].cpu_base = cpu_base;

@@ -2518,7 +2518,7 @@ static int mmc_blk_suspend(struct mmc_card *card)
 	struct mmc_blk_data *part_md;
 	struct mmc_blk_data *md = mmc_get_drvdata(card);
 	int rc = 0;
-	
+
 	if (md) {
 		rc = mmc_queue_suspend(&md->queue);
 		if (rc)
@@ -2530,13 +2530,13 @@ static int mmc_blk_suspend(struct mmc_card *card)
 		}
 	}
 	goto out;
-	
-out_resume:
+
+ out_resume:
 	mmc_queue_resume(&md->queue);
 	list_for_each_entry(part_md, &md->part, part) {
 		mmc_queue_resume(&part_md->queue);
 	}
-out:	
+ out:
 	return rc;
 }
 
