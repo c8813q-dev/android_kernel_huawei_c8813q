@@ -74,11 +74,6 @@ enum {
 	ACPU_PLL_TCXO,
 	ACPU_PLL_END,
 };
-enum {
-       STATE_NORMAL            = 0,
-       STATE_SHUTDOWN_PREPARE,
-       STATE_SHUTDOWN_DONE,
-};
 
 enum {
 	STATE_NORMAL		= 0,
@@ -530,18 +525,6 @@ out:
 		mutex_unlock(&drv_state.lock);
 
 	return rc;
-}
-static void acpuclk_8625q_restart_config(struct platform_device *pdev)
-{
-       int rc;
-       drv_state.restart_config_done = STATE_SHUTDOWN_PREPARE;
-       rc = acpuclk_8625q_set_rate(0, SHUTDOWN_FREQ_KHZ, SETRATE_CPUFREQ);
-       if (rc) {
-               pr_err("Unable to set frequency to %dKhz\n", SHUTDOWN_FREQ_KHZ);
-               return;
-       }
-       pr_debug("%s: Current ACPU frequency %ld\n", __func__,
-                       acpuclk_get_rate(0));
 }
 
 static void acpuclk_8625q_restart_config(struct platform_device *pdev)
