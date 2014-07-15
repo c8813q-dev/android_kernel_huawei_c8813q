@@ -351,8 +351,7 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 		rc = -EINVAL;
 		goto out;
 	}
-
-
+	strt_s = cur_s = drv_state.current_speed;
 
 	WARN_ONCE(cur_s == NULL, "%s: not initialized\n", __func__);
 	if (cur_s == NULL) {
