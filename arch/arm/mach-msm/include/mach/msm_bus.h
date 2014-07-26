@@ -110,4 +110,6 @@ static inline int msm_bus_axi_portunhalt(int master_port)
 }
 #endif
 
+struct msm_bus_scale_pdata *msm_bus_cl_get_pdata(struct platform_device *pdev);
+
 #endif /*_ARCH_ARM_MACH_MSM_BUS_H*/
