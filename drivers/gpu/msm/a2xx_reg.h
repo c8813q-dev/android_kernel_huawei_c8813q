@@ -364,7 +364,6 @@ union reg_cp_rb_cntl {
 #define REG_RB_MODECONTROL               0x2208
 #define REG_RB_SURFACE_INFO              0x2000
 #define REG_RB_SAMPLE_POS                0x220a
-#define REG_RB_BC_CONTROL                0x0F01
 
 #define REG_SCRATCH_ADDR                 0x01DD
 #define REG_SCRATCH_REG0                 0x0578

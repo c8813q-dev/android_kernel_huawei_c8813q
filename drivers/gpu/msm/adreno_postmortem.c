@@ -12,7 +12,6 @@
  */
 
 #include <linux/vmalloc.h>
-#include <mach/board.h>
 
 #include "kgsl.h"
 #include "kgsl_sharedmem.h"
@@ -702,8 +701,6 @@ int adreno_dump(struct kgsl_device *device, int manual)
 	int num_iommu_units = 0;
 
 	mb();
-
-	msm_clk_dump_debug_info();
 
 	if (device->pm_dump_enable) {
 		if (adreno_is_a2xx(adreno_dev))
