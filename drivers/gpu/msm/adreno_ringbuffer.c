@@ -637,7 +637,6 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	}
 	timestamp = rb->timestamp[context_id];
 
-<<<<<<< HEAD
 	/* HW Workaround for MMU Page fault
 	* due to memory getting free early before
 	* GPU completes it.
@@ -648,10 +647,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		GSL_RB_WRITE(ringcmds, rcmd_gpu, 0x00);
 	}
 
-	/* scratchpad ts for recovery */
-=======
 	/* scratchpad ts for fault tolerance */
->>>>>>> d20d71a... msm: kgsl: Renaming recovery to fault tolerance
 	GSL_RB_WRITE(ringcmds, rcmd_gpu, cp_type0_packet(REG_CP_TIMESTAMP, 1));
 	GSL_RB_WRITE(ringcmds, rcmd_gpu, rb->timestamp[KGSL_MEMSTORE_GLOBAL]);
 
