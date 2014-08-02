@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -469,6 +469,8 @@ static int mipi_nt35510_lcd_on(struct platform_device *pdev)
 	struct msm_fb_data_type *mfd;
 	struct mipi_panel_info *mipi;
 	static int rotate;
+	struct dcs_cmd_req cmdreq;
+
 	mfd = platform_get_drvdata(pdev);
 	if (!mfd)
 		return -ENODEV;
@@ -486,23 +488,41 @@ static int mipi_nt35510_lcd_on(struct platform_device *pdev)
 	if (mipi_nt35510_pdata && mipi_nt35510_pdata->rotate_panel)
 		rotate = mipi_nt35510_pdata->rotate_panel();
 
+	memset(&cmdreq, 0, sizeof(cmdreq));
 	if (mipi->mode == DSI_VIDEO_MODE) {
-		if (rotate)
-			video19[2] = 0x06;
-
-		mipi_dsi_cmds_tx(&nt35510_tx_buf,
-			nt35510_video_display_on_cmds,
-			ARRAY_SIZE(nt35510_video_display_on_cmds));
-
-	} else if (mipi->mode == DSI_CMD_MODE) {
-		mipi_dsi_cmds_tx(&nt35510_tx_buf,
-			nt35510_cmd_display_on_cmds,
-			ARRAY_SIZE(nt35510_cmd_display_on_cmds));
+		cmdreq.cmds = nt35510_video_display_on_cmds;
+		cmdreq.cmds_cnt = ARRAY_SIZE(nt35510_video_display_on_cmds);
+		cmdreq.flags = CMD_REQ_COMMIT;
+		cmdreq.rlen = 0;
+		cmdreq.cb = NULL;
+		mipi_dsi_cmdlist_put(&cmdreq);
 
 		if (rotate) {
-			mipi_dsi_cmds_tx(&nt35510_tx_buf,
-				nt35510_cmd_display_on_cmds_rotate,
-			ARRAY_SIZE(nt35510_cmd_display_on_cmds_rotate));
+			cmdreq.cmds = nt35510_video_display_on_cmds_rotate;
+			cmdreq.cmds_cnt =
+			ARRAY_SIZE(nt35510_video_display_on_cmds_rotate);
+			cmdreq.flags = CMD_REQ_COMMIT;
+			cmdreq.rlen = 0;
+			cmdreq.cb = NULL;
+			mipi_dsi_cmdlist_put(&cmdreq);
+		}
+	} else if (mipi->mode == DSI_CMD_MODE) {
+		cmdreq.cmds = nt35510_cmd_display_on_cmds;
+		cmdreq.cmds_cnt =
+			ARRAY_SIZE(nt35510_cmd_display_on_cmds);
+		cmdreq.flags = CMD_REQ_COMMIT;
+		cmdreq.rlen = 0;
+		cmdreq.cb = NULL;
+		mipi_dsi_cmdlist_put(&cmdreq);
+
+		if (rotate) {
+			cmdreq.cmds = nt35510_cmd_display_on_cmds_rotate;
+			cmdreq.cmds_cnt =
+				ARRAY_SIZE(nt35510_cmd_display_on_cmds_rotate);
+			cmdreq.flags = CMD_REQ_COMMIT;
+			cmdreq.rlen = 0;
+			cmdreq.cb = NULL;
+			mipi_dsi_cmdlist_put(&cmdreq);
 		}
 	}
 
@@ -512,6 +532,7 @@ static int mipi_nt35510_lcd_on(struct platform_device *pdev)
 static int mipi_nt35510_lcd_off(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
+	struct dcs_cmd_req cmdreq;
 
 	pr_debug("mipi_nt35510_lcd_off E\n");
 
@@ -522,8 +543,13 @@ static int mipi_nt35510_lcd_off(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-	mipi_dsi_cmds_tx(&nt35510_tx_buf, nt35510_display_off_cmds,
-			ARRAY_SIZE(nt35510_display_off_cmds));
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = nt35510_display_off_cmds;
+	cmdreq.cmds_cnt = ARRAY_SIZE(nt35510_display_off_cmds);
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	mipi_dsi_cmdlist_put(&cmdreq);
 
 	pr_debug("mipi_nt35510_lcd_off X\n");
 	return 0;
@@ -593,8 +619,6 @@ static int __devinit mipi_nt35510_lcd_probe(struct platform_device *pdev)
 		mipi_nt35510_pdata = pdev->dev.platform_data;
 		if (mipi_nt35510_pdata->bl_lock)
 			spin_lock_init(&mipi_nt35510_pdata->bl_spinlock);
-		else
-			mipi_nt35510_bl_ctrl = 1;
 		return 0;
 	}
 
