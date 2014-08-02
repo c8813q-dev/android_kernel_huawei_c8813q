@@ -1516,7 +1516,7 @@ static long audio_mvs_ioctl(struct file *file,
 	switch (cmd) {
 	case AUDIO_GET_MVS_CONFIG: {
 		struct msm_audio_mvs_config config;
-		memset(&config, 0, sizeof(config));
+
 		MM_DBG("GET_MVS_CONFIG mvs_mode %d rate_type %d\n",
 			config.mvs_mode, config.rate_type);
 
@@ -1734,6 +1734,7 @@ static void __exit audio_mvs_exit(void)
 {
 	MM_DBG("\n");
 
+	wake_lock_destroy(&audio_mvs_info.suspend_lock);
 	misc_deregister(&audio_mvs_misc);
 }
 
