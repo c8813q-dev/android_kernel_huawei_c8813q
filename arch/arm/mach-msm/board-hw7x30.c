@@ -74,7 +74,7 @@
 #include <linux/skbuff.h>
 #endif
 
-#include <linux/ion.h>
+#include <linux/msm_ion.h>
 #include <mach/ion.h>
 
 
