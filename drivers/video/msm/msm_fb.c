@@ -600,7 +600,13 @@ static int msm_fb_probe(struct platform_device *pdev)
 			mfd->timeline_value = 0;
 		}
 	}
+	/* add qcom patch to work around lcd esd issue */
+	INIT_DELAYED_WORK(&mfd->panel_live_status, mipi_dsi_check_live_status);
+	INIT_WORK(&mfd->display_reset, mipi_dsi_reset_display);
 
+	#ifdef CONFIG_HUAWEI_KERNEL
+	mfd->is_panel_alive = TRUE;
+	#endif
 	return 0;
 }
 
