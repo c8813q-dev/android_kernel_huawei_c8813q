@@ -139,7 +139,6 @@ enum {
 	MDP_BGRX_8888,   /* BGRX 8888 */
 	MDP_BGR_888,      /* BGR 888 */
 	MDP_Y_CBCR_H2V2_VENUS,
-	MDP_BGRX_8888,   /* BGRX 8888 */
 	MDP_RGBA_8888_TILE,	  /* RGBA 8888 in tile format */
 	MDP_ARGB_8888_TILE,	  /* ARGB 8888 in tile format */
 	MDP_ABGR_8888_TILE,	  /* ABGR 8888 in tile format */
@@ -717,7 +716,6 @@ struct mdp_async_blit_req_list {
 	struct mdp_blit_req req[];
 };
 
-#define MDP_DISPLAY_COMMIT_OVERLAY	1
 struct mdp_buf_fence {
 	uint32_t flags;
 	uint32_t acq_fen_fd_cnt;
