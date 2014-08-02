@@ -1,6 +1,6 @@
 /* arch/arm/mach-msm/audio_ac3.c
  *
- * Copyright (c) 2008-2009, 2011-2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2009, 2011-2013 The Linux Foundation. All rights reserved.
  *
  * This code also borrows from audio_aac.c, which is
  * Copyright (C) 2008 Google, Inc.
@@ -37,7 +37,7 @@
 #include <linux/msm_audio.h>
 #include <linux/memory_alloc.h>
 #include <linux/msm_audio_ac3.h>
-#include <linux/ion.h>
+#include <linux/msm_ion.h>
 
 #include <mach/msm_adsp.h>
 #include <mach/iommu.h>
@@ -186,8 +186,10 @@ static void audac3_send_data(struct audio *audio, unsigned needed);
 static void audac3_dsp_event(void *private, unsigned id, uint16_t *msg);
 static void audac3_config_hostpcm(struct audio *audio);
 static void audac3_buffer_refresh(struct audio *audio);
+#ifdef CONFIG_HAS_EARLYSUSPEND
 static void audac3_post_event(struct audio *audio, int type,
 		union msm_audio_event_payload payload);
+#endif
 
 static int rmt_put_resource(struct audio *audio)
 {
@@ -1262,10 +1264,7 @@ static int audac3_process_eos(struct audio *audio,
 		rc = -EBUSY;
 		goto done;
 	}
-	if (mfield_size > audio->out[0].size) {
-		rc = -EINVAL;
-		goto done;
-	}
+
 	if (copy_from_user(frame->data, buf_start, mfield_size)) {
 		rc = -EFAULT;
 		goto done;
@@ -1322,10 +1321,6 @@ static ssize_t audac3_write(struct file *file, const char __user *buf,
 					rc = -EINVAL;
 					break;
 				}
-				if (mfield_size > audio->out[0].size) {
-					rc = -EINVAL;
-					break;
-				}
 				MM_DBG("mf offset_val %x\n", mfield_size);
 				if (copy_from_user(cpy_ptr, buf,
 							mfield_size)) {
@@ -1356,10 +1351,7 @@ static ssize_t audac3_write(struct file *file, const char __user *buf,
 			 }
 			 frame->mfield_sz = mfield_size;
 		}
-		if (mfield_size > frame->size) {
-			rc = -EINVAL;
-			break;
-		}
+
 		xfer = (count > (frame->size - mfield_size)) ?
 			(frame->size - mfield_size) : count;
 		if (copy_from_user(cpy_ptr, buf, xfer)) {
