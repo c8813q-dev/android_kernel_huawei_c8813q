@@ -136,9 +136,9 @@ enum {
 	MDP_YCRCB_H1V1,   /* YCrCb interleave */
 	MDP_YCBCR_H1V1,   /* YCbCr interleave */
 	MDP_BGR_565,      /* BGR 565 planer */
-	MDP_BGRX_8888,   /* BGRX 8888 */
 	MDP_BGR_888,      /* BGR 888 */
 	MDP_Y_CBCR_H2V2_VENUS,
+	MDP_BGRX_8888,   /* BGRX 8888 */
 	MDP_RGBA_8888_TILE,	  /* RGBA 8888 in tile format */
 	MDP_ARGB_8888_TILE,	  /* ARGB 8888 in tile format */
 	MDP_ABGR_8888_TILE,	  /* ABGR 8888 in tile format */
