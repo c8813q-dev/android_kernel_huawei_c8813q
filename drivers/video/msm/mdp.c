@@ -1016,6 +1016,7 @@ int mdp_histogram_stop(struct fb_info *info, uint32_t block)
 	mgmt->mdp_is_hist_start = FALSE;
 
 	if (!mfd->panel_power_on) {
+		mgmt->mdp_is_hist_data = FALSE;
 		if (mgmt->hist != NULL) {
 			mgmt->hist = NULL;
 			complete(&mgmt->mdp_hist_comp);
@@ -1344,9 +1345,7 @@ ssize_t mdp_dma_show_event(struct device *dev,
 
 	INIT_COMPLETION(vsync_cntrl.vsync_wait);
 
-	/* add qcom patch to work around lcd esd issue */
-	if (!wait_for_completion_timeout(&vsync_cntrl.vsync_wait, HZ/10))
-		pr_err("Timedout Vsync: %s %d", __func__, __LINE__);
+	wait_for_completion(&vsync_cntrl.vsync_wait);
 	ret = snprintf(buf, PAGE_SIZE, "VSYNC=%llu",
 			ktime_to_ns(vsync_cntrl.vsync_time));
 	buf[strlen(buf) + 1] = '\0';
@@ -1377,34 +1376,11 @@ int mdp_ppp_pipe_wait(void)
 	return ret;
 }
 
-/* add qcom patch to work around lcd esd issue */
-void cmd_wait4dmap(struct msm_fb_data_type *mfd)
-{
-	int need_wait = 0;
-	unsigned long flag;
-
-	spin_lock_irqsave(&mdp_spin_lock, flag);
-	if (mfd->dma->busy == TRUE)
-		need_wait = 1;
-	spin_unlock_irqrestore(&mdp_spin_lock, flag);
-
-	if (need_wait) {
-		if (!wait_for_completion_timeout(&mfd->dma->comp, HZ/10)) {
-			mfd->dma->busy = FALSE;
-			mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_OFF,
-								FALSE);
-			mdp_disable_irq(MDP_DMA2_TERM);
-			pr_err("DMA timedout: %s %i", __func__, __LINE__);
-		}
-	}
-}
-
 #define MAX_VSYNC_GAP		4
 #define DEFAULT_FRAME_RATE	60
 
 u32 mdp_get_panel_framerate(struct msm_fb_data_type *mfd)
 {
-#if 0
 	u32 frame_rate = 0, pixel_rate = 0, total_pixel;
 	struct msm_panel_info *panel_info = &mfd->panel_info;
 
@@ -1446,11 +1422,6 @@ u32 mdp_get_panel_framerate(struct msm_fb_data_type *mfd)
 	pr_debug("%s frame rate=%d total_pixel=%d, pixel_rate=%d\n", __func__,
 		frame_rate, total_pixel, pixel_rate);
 
-	return frame_rate;
-#endif
-	u32 frame_rate = 0;
-	frame_rate = DEFAULT_FRAME_RATE;
-	pr_warn("%s frame rate=%d is default\n", __func__, frame_rate);
 	return frame_rate;
 }
 
@@ -1588,10 +1559,7 @@ void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 		mdp_ppp_waiting = TRUE;
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
 		outpdw(MDP_BASE + 0x30, 0x1000);
-		/* add qcom patch to work around lcd esd issue */
-		if (wait_for_completion_killable_timeout(&mdp_ppp_comp,
-								HZ/10) <= 0)
-			pr_err("Timedout PPP: %s %d", __func__, __LINE__);
+		wait_for_completion_killable(&mdp_ppp_comp);
 		mdp_disable_irq(term);
 
 		if (mdp_debug[MDP_PPP_BLOCK]) {
@@ -1924,7 +1892,6 @@ void mdp_histogram_handle_isr(struct mdp_hist_mgmt *mgmt)
 }
 
 #ifndef CONFIG_FB_MSM_MDP40
-/* merge qcom patch to solve blue screen when power on */
 irqreturn_t mdp_isr(int irq, void *ptr)
 {
 	uint32 mdp_interrupt = 0;
@@ -2086,8 +2053,7 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 			mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_OFF,
 				TRUE);
 			mdp_disable_irq_nosync(MDP_DMA2_TERM);
-			/* add qcom patch to work around lcd esd issue */
-			complete_all(&dma->comp);
+			complete(&dma->comp);
 		}
 #endif
 	}
@@ -2610,7 +2576,6 @@ static int mdp_irq_clk_setup(struct platform_device *pdev,
 	return 0;
 }
 
-/* add qcom patch to work around lcd esd issue */
 static int mdp_probe(struct platform_device *pdev)
 {
 	struct platform_device *msm_fb_dev = NULL;
@@ -2625,18 +2590,6 @@ static int mdp_probe(struct platform_device *pdev)
 #endif
 #if defined(CONFIG_FB_MSM_MIPI_DSI) && defined(CONFIG_FB_MSM_MDP40)
 	struct mipi_panel_info *mipi;
-#endif
-        static int contSplash_update_done;
-	void *splash_virt_addr;
-	int cur_page;
-	unsigned long cur_addr;
-	struct splash_pages page_data;
-
-/* modem side generate an interrupt,we should clear this interrupt before mdp work */
-#ifdef CONFIG_HUAWEI_KERNEL
-	#ifndef CONFIG_FB_MSM_MDP40
-		uint32 mdp_interrupt = 0;
-	#endif
 #endif
 
 	if ((pdev->id == 0) && (pdev->num_resources > 0)) {
@@ -2693,13 +2646,6 @@ static int mdp_probe(struct platform_device *pdev)
 	if (!mdp_resource_initialized)
 		return -EPERM;
 
-/* modem side generate an interrupt,we should clear this interrupt before mdp work */
-#ifdef CONFIG_HUAWEI_KERNEL
-	#ifndef CONFIG_FB_MSM_MDP40
-		mdp_interrupt = inp32(MDP_INTR_STATUS);
-		outp32(MDP_INTR_CLEAR, mdp_interrupt);
-	#endif
-#endif
 	mfd = platform_get_drvdata(pdev);
 
 	if (!mfd)
@@ -2719,83 +2665,6 @@ static int mdp_probe(struct platform_device *pdev)
 	mfd->pdev = msm_fb_dev;
 	mfd->mdp_rev = mdp_rev;
 	mfd->vsync_init = NULL;
-
-        if (mdp_pdata) {
-		if (mdp_pdata->cont_splash_enabled) {
-			uint32 bpp = 3;
-			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-			/*read panel wxh and calculate splash screen
-			size*/
-			mdp_pdata->splash_screen_size =
-			inpdw(MDP_BASE + 0x90004);
-			mdp_pdata->splash_screen_size =
-				(((mdp_pdata->splash_screen_size >> 16) &
-				0x00000FFF) * (
-				mdp_pdata->splash_screen_size &
-				0x00000FFF)) * bpp;
-
-			mdp_pdata->splash_screen_addr =
-				inpdw(MDP_BASE + 0x90008);
-
-			mfd->copy_splash_buf = dma_alloc_coherent(NULL,
-				mdp_pdata->splash_screen_size,
-				(dma_addr_t *) &(mfd->copy_splash_phys),
-				GFP_KERNEL);
-
-			if (!mfd->copy_splash_buf) {
-				pr_err("DMA ALLOC FAILED for SPLASH\n");
-				return -ENOMEM;
-			}
-
-			page_data.size = PFN_ALIGN(mdp_pdata->splash_screen_size);
-			page_data.nrpages = (page_data.size) >> PAGE_SHIFT;
-			page_data.pages = kzalloc(sizeof(struct page *)*page_data.nrpages,
-						GFP_KERNEL);
-			if (!page_data.pages) {
-				pr_err("KZALLOC FAILED for PAGES\n");
-				return -ENOMEM;
-			}
-
-			/* Following code for obtaining the virtual address for splash
-			screen address relies on the fact that, splash screen buffer is
-			part of the kernel's memory map and this code need to be changed
-			if the memory comes from outside the kernel. */
-			cur_addr = mdp_pdata->splash_screen_addr;
-			for(cur_page = 0; cur_page < page_data.nrpages; cur_page++) {
-				page_data.pages[cur_page] = phys_to_page(cur_addr);
-				if (!page_data.pages[cur_page]) {
-					pr_err("PHYS_TO_PAGE FAILED for SPLASH\n");
-					kfree(page_data.pages);
-					return -ENOMEM;
-	                        }
-				cur_addr += (1 << PAGE_SHIFT);
-			}
-			splash_virt_addr = vmap(page_data.pages, page_data.nrpages,
-					VM_IOREMAP, pgprot_kernel);
-			if (!splash_virt_addr) {
-				pr_err("VMAP FAILED for SPLASH\n");
-				kfree(page_data.pages);
-				return -ENOMEM;
-                        }
-			memcpy(mfd->copy_splash_buf, splash_virt_addr,
-				mdp_pdata->splash_screen_size);
-			vunmap(splash_virt_addr);
-			kfree(page_data.pages);
-
-			MDP_OUTP(MDP_BASE + 0x90008,
-				mfd->copy_splash_phys);
-			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-
-			mfd->cont_splash_done = 0;
-			if (!contSplash_update_done) {
-				if (mfd->panel.type == MIPI_VIDEO_PANEL)
-					mdp_pipe_ctrl(MDP_CMD_BLOCK,
-						MDP_BLOCK_POWER_ON, FALSE);
-				contSplash_update_done = 1;
-			}
-		} else
-			mfd->cont_splash_done = 1;
-	}
 
 	mfd->ov0_wb_buf = MDP_ALLOC(sizeof(struct mdp_buf_type));
 	mfd->ov1_wb_buf = MDP_ALLOC(sizeof(struct mdp_buf_type));
@@ -2828,6 +2697,52 @@ static int mdp_probe(struct platform_device *pdev)
 		goto mdp_probe_err;
 	}
 
+	if (mdp_pdata) {
+		if (mdp_pdata->cont_splash_enabled &&
+				 mfd->panel_info.pdest == DISPLAY_1) {
+			char *cp;
+			uint32 bpp = 3;
+			/*read panel wxh and calculate splash screen
+			  size*/
+			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+			mdp_pdata->splash_screen_size =
+				inpdw(MDP_BASE + 0x90004);
+			mdp_pdata->splash_screen_size =
+				(((mdp_pdata->splash_screen_size >> 16) &
+				  0x00000FFF) * (
+					  mdp_pdata->splash_screen_size &
+					  0x00000FFF)) * bpp;
+
+			mdp_pdata->splash_screen_addr =
+				inpdw(MDP_BASE + 0x90008);
+
+			mfd->copy_splash_buf = dma_alloc_coherent(NULL,
+					mdp_pdata->splash_screen_size,
+					(dma_addr_t *) &(mfd->copy_splash_phys),
+					GFP_KERNEL);
+
+			if (!mfd->copy_splash_buf) {
+				pr_err("DMA ALLOC FAILED for SPLASH\n");
+				return -ENOMEM;
+			}
+			cp = (char *)ioremap(
+					mdp_pdata->splash_screen_addr,
+					mdp_pdata->splash_screen_size);
+			if (!cp) {
+				pr_err("IOREMAP FAILED for SPLASH\n");
+				return -ENOMEM;
+			}
+			memcpy(mfd->copy_splash_buf, cp,
+					mdp_pdata->splash_screen_size);
+
+			MDP_OUTP(MDP_BASE + 0x90008,
+					mfd->copy_splash_phys);
+		}
+
+		mfd->cont_splash_done = (1 - mdp_pdata->cont_splash_enabled);
+	}
+
 	/* data chain */
 	pdata = msm_fb_dev->dev.platform_data;
 	pdata->on = mdp_on;
@@ -2847,7 +2762,6 @@ static int mdp_probe(struct platform_device *pdev)
 		INIT_WORK(&mfd->vsync_resync_worker,
 			  mdp_vsync_resync_workqueue_handler);
 		mfd->hw_refresh = FALSE;
-		mfd->wait4dmap = NULL;
 
 		if (mfd->panel.type == MDDI_PANEL)
 			mdp4_mddi_rdptr_init(0);
@@ -2957,14 +2871,12 @@ static int mdp_probe(struct platform_device *pdev)
 			mfd->cursor_update = mdp_hw_cursor_sync_update;
 		else
 			mfd->cursor_update = mdp_hw_cursor_update;
-		mfd->wait4dmap = NULL;
 		break;
 
 	case MIPI_CMD_PANEL:
 #ifndef CONFIG_FB_MSM_MDP303
 		mfd->dma_fnc = mdp4_dsi_cmd_overlay;
 		mipi = &mfd->panel_info.mipi;
-		mfd->wait4dmap = NULL;
 		mfd->vsync_init = mdp4_dsi_rdptr_init;
 		mfd->vsync_show = mdp4_dsi_cmd_show_event;
 		if (mfd->panel_info.pdest == DISPLAY_1) {
@@ -2979,12 +2891,6 @@ static int mdp_probe(struct platform_device *pdev)
 		mfd->start_histogram = mdp_histogram_start;
 		mfd->stop_histogram = mdp_histogram_stop;
 		mdp4_display_intf_sel(if_no, DSI_CMD_INTF);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-		spin_lock_irqsave(&mdp_spin_lock, flag);
-		mdp_intr_mask |= INTR_OVERLAY0_DONE;
-		outp32(MDP_INTR_ENABLE, mdp_intr_mask);
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 #else
 		mfd->dma_fnc = mdp_dma2_update;
 		mfd->do_histogram = mdp_do_histogram;
@@ -3009,7 +2915,6 @@ static int mdp_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_FB_MSM_DTV
 	case DTV_PANEL:
-		mfd->wait4dmap = NULL;
 		mfd->vsync_init = mdp4_dtv_vsync_init;
 		mfd->vsync_show = mdp4_dtv_show_event;
 		pdata->on = mdp4_dtv_on;
@@ -3031,7 +2936,6 @@ static int mdp_probe(struct platform_device *pdev)
 		pdata->on = mdp_lcdc_on;
 		pdata->off = mdp_lcdc_off;
 #endif
-		mfd->wait4dmap = NULL;
 		mfd->hw_refresh = TRUE;
 #if	defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_MDP40)
 		mfd->cursor_update = mdp_hw_cursor_sync_update;
@@ -3075,14 +2979,12 @@ static int mdp_probe(struct platform_device *pdev)
 #if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_TVOUT)
 		pdata->on = mdp4_atv_on;
 		pdata->off = mdp4_atv_off;
-		mfd->wait4dmap = NULL;
 		mfd->dma_fnc = mdp4_atv_overlay;
 		mfd->dma = &dma_e_data;
 		mdp4_display_intf_sel(EXTERNAL_INTF_SEL, TV_INTF);
 #else
 		pdata->on = mdp_dma3_on;
 		pdata->off = mdp_dma3_off;
-		mfd->wait4dmap = NULL;
 		mfd->hw_refresh = TRUE;
 		mfd->dma_fnc = mdp_dma3_update;
 		mfd->dma = &dma3_data;
@@ -3093,7 +2995,6 @@ static int mdp_probe(struct platform_device *pdev)
 	case WRITEBACK_PANEL:
 		{
 			unsigned int mdp_version;
-			mfd->wait4dmap = NULL;
 			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON,
 						 FALSE);
 			mdp_version = inpdw(MDP_BASE + 0x0);

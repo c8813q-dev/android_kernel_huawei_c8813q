@@ -47,6 +47,7 @@ int mdp4_atv_on(struct platform_device *pdev)
 #ifdef CONFIG_HUAWEI_KERNEL
 	static boolean first_time = TRUE;
 #endif
+
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
 	if (!mfd)
@@ -131,6 +132,7 @@ int mdp4_atv_on(struct platform_device *pdev)
 		first_time = FALSE;
 	}
 #endif
+
 	if (ret == 0)
 		mdp_pipe_ctrl(MDP_OVERLAY1_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 

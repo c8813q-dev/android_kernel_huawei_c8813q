@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,9 +29,6 @@
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
-#ifdef CONFIG_HUAWEI_KERNEL
-#include <linux/hardware_self_adapt.h>
-#endif
 
 static int mddi_state;
 
@@ -139,56 +136,6 @@ static void mdp4_mddi_blt_dmap_update(struct mdp4_overlay_pipe *pipe)
 	/* dmap */
 	MDP_OUTP(MDP_BASE + 0x90008, addr);
 }
-/* Config MDP reg according bpp ,the interface for 
- * dma_s pipe or dma_p(overlay) pipe.
- */
-#ifdef CONFIG_FB_MSM_BPP_SWITCH
-void mdp4_dma_s_update_lcd(struct msm_fb_data_type *mfd,
-				struct mdp4_overlay_pipe *pipe);
-void mdp4_switch_bpp_config(struct msm_fb_data_type *mfd,uint32 bpp)
-{
-    uint32 mddi_ld_param;
-    uint16 mddi_vdo_packet_reg;
-    mfd->panel_info.bpp = bpp;    
-    printk(KERN_ERR "%s: switch bpp into %d\n", __func__,bpp);
-    if(24 == bpp)
-    {
-       mdp4_dma_s_update_lcd(mfd,mddi_pipe); 
-    }
-    else if (16 == bpp)
-    {
-        mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-        mddi_ld_param = 0;
-        mddi_vdo_packet_reg = mfd->panel_info.mddi.vdopkt;
-        if (mfd->panel_info.type == MDDI_PANEL) {
-        	if (mfd->panel_info.pdest == DISPLAY_1)
-        		mddi_ld_param = 0;
-        	else
-        		mddi_ld_param = 1;
-        } else {
-        	mddi_ld_param = 2;
-        }
-
-        MDP_OUTP(MDP_BASE + 0x00090, mddi_ld_param);
-        /* config registers base on bpp(16 ,24 or other) */
-        if (mfd->panel_info.bpp == 24)
-        	MDP_OUTP(MDP_BASE + 0x00094,
-        	 (MDDI_VDO_PACKET_DESC_24 << 16) | mddi_vdo_packet_reg);
-        else if (mfd->panel_info.bpp == 16)
-        	MDP_OUTP(MDP_BASE + 0x00094,
-        	 (MDDI_VDO_PACKET_DESC_16 << 16) | mddi_vdo_packet_reg);
-        else
-        	MDP_OUTP(MDP_BASE + 0x00094,
-        	 (MDDI_VDO_PACKET_DESC << 16) | mddi_vdo_packet_reg);
-
-        MDP_OUTP(MDP_BASE + 0x00098, 0x01);
-        mdp4_overlay_dmap_cfg(mfd, 0);
-        mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-    }
-    else 
-        return;    
-}
-#endif
 
 static void mdp4_mddi_wait4dmap(int cndx);
 static void mdp4_mddi_wait4ov(int cndx);

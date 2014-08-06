@@ -45,8 +45,7 @@ ssize_t mdp_dma_video_show_event(struct device *dev,
 		atomic_read(&vsync_cntrl.vsync_resume) == 0)
 		return 0;
 
-	if (!wait_for_completion_timeout(&vsync_cntrl.vsync_wait, HZ/10))
-		pr_err("Timedout Vsync: %s %d", __func__, __LINE__);
+	wait_for_completion(&vsync_cntrl.vsync_wait);
 	ret = snprintf(buf, PAGE_SIZE, "VSYNC=%llu",
 			ktime_to_ns(vsync_cntrl.vsync_time));
 	buf[strlen(buf) + 1] = '\0';
@@ -302,7 +301,6 @@ void mdp_dma_video_vsync_ctrl(int enable)
 		atomic_set(&vsync_cntrl.vsync_resume, 1);
 }
 
-/* add qcom patch to work around lcd esd issue */
 void mdp_dsi_video_update(struct msm_fb_data_type *mfd)
 {
 	struct fb_info *fbi = mfd->fbi;
@@ -335,8 +333,7 @@ void mdp_dsi_video_update(struct msm_fb_data_type *mfd)
 	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 
 	spin_unlock_irqrestore(&mdp_spin_lock, flag);
-	if (wait_for_completion_killable_timeout(&mfd->dma->comp, HZ/10) <= 0)
-		pr_err("DMA_P timedout: %s %i", __func__, __LINE__);
+	wait_for_completion_killable(&mfd->dma->comp);
 	mdp_disable_irq(irq_block);
 	up(&mfd->dma->mutex);
 }
