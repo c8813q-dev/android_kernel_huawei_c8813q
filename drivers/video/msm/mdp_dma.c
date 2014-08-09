@@ -486,15 +486,29 @@ void mdp_dma2_update(struct msm_fb_data_type *mfd)
 	int need_wait = 0;
 
 	down(&mfd->dma->mutex);
-	if ((mfd) && (mfd->panel_power_on)) {
+	if ((mfd) && (mfd->panel_power_on) && mfd->is_panel_alive) {
 		down(&mfd->sem);
 		spin_lock_irqsave(&mdp_spin_lock, flag);
 		if (mfd->dma->busy == TRUE)
 			need_wait++;
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
-		if (need_wait)
-			wait_for_completion_killable(&mfd->dma->comp);
+		if (need_wait) {
+			if (wait_for_completion_killable_timeout(
+						&mfd->dma->comp, HZ/10) <= 0) {
+				spin_lock_irqsave(&mdp_spin_lock, flag);
+				mfd->dma->busy = FALSE;
+				spin_unlock_irqrestore(&mdp_spin_lock, flag);
+				mdp_disable_irq(MDP_DMA2_TERM);
+				mdp_pipe_ctrl(MDP_DMA2_BLOCK,
+						MDP_BLOCK_POWER_OFF, FALSE);
+				up(&mfd->sem);
+				up(&mfd->dma->mutex);
+				pr_err("Timedout DMA: %s %d",
+						__func__, __LINE__);
+				return;
+			}
+		}
 
 		/* schedule DMA to start */
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);

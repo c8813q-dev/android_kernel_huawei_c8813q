@@ -39,8 +39,10 @@
 #include "mipi_dsi.h"
 #include "mdp.h"
 #include "mdp4.h"
+#include "hw_lcd_common.h"
 
 static struct completion dsi_dma_comp;
+static struct completion dsi_bta_comp;
 static struct completion dsi_mdp_comp;
 static struct dsi_buf dsi_tx_buf;
 static struct dsi_buf dsi_rx_buf;
@@ -93,6 +95,7 @@ void mipi_dsi_mdp_stat_inc(int which)
 void mipi_dsi_init(void)
 {
 	init_completion(&dsi_dma_comp);
+	init_completion(&dsi_bta_comp);
 	init_completion(&dsi_mdp_comp);
 	mipi_dsi_buf_alloc(&dsi_tx_buf, DSI_BUF_SIZE);
 	mipi_dsi_buf_alloc(&dsi_rx_buf, DSI_BUF_SIZE);
@@ -1013,11 +1016,12 @@ void mipi_dsi_op_mode_config(int mode)
 	dsi_ctrl &= ~0x07;
 	if (mode == DSI_VIDEO_MODE) {
 		dsi_ctrl |= 0x03;
-		intr_ctrl = DSI_INTR_CMD_DMA_DONE_MASK;
+		intr_ctrl = DSI_INTR_CMD_DMA_DONE_MASK | DSI_INTR_BTA_DONE_MASK;
 	} else {		/* command mode */
 		dsi_ctrl |= 0x05;
 		intr_ctrl = DSI_INTR_CMD_DMA_DONE_MASK | DSI_INTR_ERROR_MASK |
-				DSI_INTR_CMD_MDP_DONE_MASK;
+				DSI_INTR_CMD_MDP_DONE_MASK |
++				DSI_INTR_BTA_DONE_MASK;
 	}
 
 	pr_debug("%s: dsi_ctrl=%x intr=%x\n", __func__, dsi_ctrl, intr_ctrl);
@@ -1065,6 +1069,26 @@ void mipi_dsi_cmd_bta_sw_trigger(void)
 	mipi_dsi_ack_err_status();
 
 	pr_debug("%s: BTA done, cnt=%d\n", __func__, cnt);
+}
+
+int mipi_dsi_wait_for_bta_ack(void)
+{
+	int ret = 0;
+	unsigned long flag;
+
+	spin_lock_irqsave(&dsi_mdp_lock, flag);
+	INIT_COMPLETION(dsi_bta_comp);
+	mipi_dsi_enable_irq(DSI_BTA_TERM);
+	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x094, 0x01);	/* trigger */
+	wmb();
+	ret = wait_for_completion_killable_timeout(&dsi_bta_comp, HZ/10);
+	if (ret <= 0) {
+		mipi_dsi_disable_irq(DSI_BTA_TERM);
+		pr_err("DSI BTA error: %s %i", __func__, __LINE__);
+	}
+
+	return ret;
 }
 
 static char set_tear_on[2] = {0x35, 0x00};
@@ -1198,6 +1222,9 @@ static int mipi_dsi_cmds_rx(struct dsi_buf *tp, struct dsi_buf *rp,
 	struct dsi_cmd_desc *cmds;
 	int cnt, len, diff, pkt_size;
 	char cmd;
+#if (LCD_HX8369A_TIANMA_ESD_SIGN || LCD_OTM8009A_CMI_ESD_SIGN || LCD_OTM9608A_TIANMA_ESD_SIGN)
+	lcd_panel_type panel_type = get_lcd_panel_type();
+#endif
 
 	if (req->flags & CMD_REQ_NO_MAX_PKT_SIZE) {
 		/* Only support rlen = 4*n */
@@ -1245,6 +1272,15 @@ static int mipi_dsi_cmds_rx(struct dsi_buf *tp, struct dsi_buf *rp,
 	mipi_dsi_buf_init(tp);
 	mipi_dsi_cmd_dma_add(tp, cmds);
 
+#if (LCD_HX8369A_TIANMA_ESD_SIGN || LCD_OTM8009A_CMI_ESD_SIGN || LCD_OTM9608A_TIANMA_ESD_SIGN)
+	if(MIPI_CMD_HX8369A_TIANMA_FWVGA == panel_type
+		|| MIPI_CMD_OTM8009A_CHIMEI_WVGA == panel_type
+		|| MIPI_CMD_OTM8009A_CHIMEI_FWVGA == panel_type
+		|| MIPI_CMD_OTM8009A_TIANMA_FWVGA == panel_type
+		|| MIPI_CMD_OTM9608A_TIANMA_QHD == panel_type )
+		mipi_set_tx_power_mode(0);//entry high speed mode  
+#endif
+
 	/* transmit read comamnd to client */
 	mipi_dsi_cmd_dma_tx(tp);
 
@@ -1261,6 +1297,15 @@ static int mipi_dsi_cmds_rx(struct dsi_buf *tp, struct dsi_buf *rp,
 		 */
 		rp->data += 2;
 	}
+
+#if (LCD_HX8369A_TIANMA_ESD_SIGN || LCD_OTM8009A_CMI_ESD_SIGN || LCD_OTM9608A_TIANMA_ESD_SIGN)
+	if(MIPI_CMD_HX8369A_TIANMA_FWVGA == panel_type
+		|| MIPI_CMD_OTM8009A_CHIMEI_WVGA == panel_type
+		|| MIPI_CMD_OTM8009A_CHIMEI_FWVGA == panel_type
+		|| MIPI_CMD_OTM8009A_TIANMA_FWVGA == panel_type
+		|| MIPI_CMD_OTM9608A_TIANMA_QHD == panel_type )
+		mipi_set_tx_power_mode(1);//entry low power mode  
+#endif
 
 	mipi_dsi_cmd_dma_rx(rp, cnt);
 
@@ -1298,6 +1343,15 @@ static int mipi_dsi_cmds_rx(struct dsi_buf *tp, struct dsi_buf *rp,
 		break;
 	}
 
+#if (LCD_HX8369A_TIANMA_ESD_SIGN || LCD_OTM8009A_CMI_ESD_SIGN || LCD_OTM9608A_TIANMA_ESD_SIGN)
+	if(MIPI_CMD_HX8369A_TIANMA_FWVGA == panel_type
+		|| MIPI_CMD_OTM8009A_CHIMEI_WVGA == panel_type
+		|| MIPI_CMD_OTM8009A_CHIMEI_FWVGA == panel_type
+		|| MIPI_CMD_OTM8009A_TIANMA_FWVGA == panel_type
+		|| MIPI_CMD_OTM9608A_TIANMA_QHD == panel_type )
+		mipi_set_tx_power_mode(0);//entry high speed mode  
+#endif
+
 	return rp->len;
 }
 
@@ -1305,6 +1359,7 @@ static int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 {
 
 	unsigned long flags;
+	lcd_panel_type panel_type = get_lcd_panel_type();
 
 #ifdef DSI_HOST_DEBUG
 	int i;
@@ -1341,7 +1396,29 @@ static int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 	wmb();
 	spin_unlock_irqrestore(&dsi_mdp_lock, flags);
 
-	wait_for_completion(&dsi_dma_comp);
+	/* judge the panel type */
+	if((MIPI_CMD_HX8369A_TIANMA_FWVGA == panel_type)
+	|| (MIPI_CMD_OTM8009A_CHIMEI_WVGA == panel_type)
+	|| (MIPI_CMD_NT35510_BOE_FWVGA == panel_type)
+	|| (MIPI_CMD_NT35510_BOE_WVGA == panel_type)
+	|| (MIPI_CMD_NT35510_CHIMEI_WVGA == panel_type)
+	|| (MIPI_CMD_NT35516_CHIMEI_QHD == panel_type)
+	|| (MIPI_CMD_NT35516_TIANMA_QHD == panel_type)
+	|| (MIPI_CMD_NT35516_TRULY_QHD == panel_type))
+	{
+		/* set the time out. thread will go on beyond the time restriction */
+		wait_for_completion_timeout(&dsi_dma_comp,HZ/10);
+	}
+	else
+	{
+		if (!wait_for_completion_timeout(&dsi_dma_comp, HZ/10)) {
+			pr_err("Wait timedout: %s %i", __func__, __LINE__);
+			spin_lock_irqsave(&dsi_mdp_lock, flags);
+			dsi_ctrl_lock = FALSE;
+			spin_unlock_irqrestore(&dsi_mdp_lock, flags);
+			mipi_dsi_disable_irq(DSI_CMD_TERM);
+		}
+	}
 
 	dma_unmap_single(&dsi_dev, tp->dmap, tp->len, DMA_TO_DEVICE);
 	tp->dmap = 0;
@@ -1405,10 +1482,14 @@ void mipi_dsi_cmd_mdp_busy(void)
 	spin_unlock_irqrestore(&dsi_mdp_lock, flags);
 
 	if (need_wait) {
-		/* wait until DMA finishes the current job */
-		pr_debug("%s: pending pid=%d\n",
-				__func__, current->pid);
-		wait_for_completion(&dsi_mdp_comp);
+		if (!wait_for_completion_timeout(&dsi_mdp_comp, HZ/10)) {
+			pr_err("Wait timedout: %s %i", __func__, __LINE__);
+			spin_lock_irqsave(&dsi_mdp_lock, flags);
+			dsi_ctrl_lock = FALSE;
+			dsi_mdp_busy = FALSE;
+			spin_unlock_irqrestore(&dsi_mdp_lock, flags);
+			mipi_dsi_disable_irq(DSI_MDP_TERM);
+		}
 	}
 	pr_debug("%s: done pid=%d\n",
 				__func__, current->pid);
@@ -1673,6 +1754,12 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 		spin_unlock(&dsi_mdp_lock);
 	}
 
+	if (isr & DSI_INTR_BTA_DONE) {
+		spin_lock(&dsi_mdp_lock);
+		complete(&dsi_bta_comp);
+		mipi_dsi_disable_irq_nosync(DSI_BTA_TERM);
+		spin_unlock(&dsi_mdp_lock);
+	}
 
 	return IRQ_HANDLED;
 }

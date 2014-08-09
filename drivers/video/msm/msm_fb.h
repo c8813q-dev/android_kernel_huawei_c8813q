@@ -83,6 +83,8 @@ struct msm_fb_data_type {
 	struct fb_info *fbi;
 
 	struct delayed_work backlight_worker;
+	struct delayed_work panel_live_status;
+	struct work_struct display_reset;
 	boolean op_enable;
 	uint32 fb_imgType;
 	boolean sw_currently_refreshing;
@@ -116,6 +118,7 @@ struct msm_fb_data_type {
 
 	struct timer_list vsync_resync_timer;
 	boolean vsync_handler_pending;
+	boolean is_panel_alive;
 	struct work_struct vsync_resync_worker;
 
 	ktime_t last_vsync_timetick;
@@ -129,6 +132,7 @@ struct msm_fb_data_type {
 
 	struct mdp_dma_data *dma;
 	struct device_attribute dev_attr;
+	void (*wait4dmap) (struct msm_fb_data_type *mfd);
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
