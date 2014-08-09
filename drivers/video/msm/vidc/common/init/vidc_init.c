@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,13 +24,13 @@
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
-#include <linux/android_pmem.h>
+
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/debugfs.h>
 #include <mach/clk.h>
 #include <linux/pm_runtime.h>
-#include <mach/msm_subsystem_map.h>
+#include <mach/iommu_domains.h>
 #include <media/msm/vcd_api.h>
 #include <media/msm/vidc_init.h>
 #include "vidc_init_internal.h"
@@ -49,7 +49,6 @@
 static struct vidc_dev *vidc_device_p;
 static dev_t vidc_dev_num;
 static struct class *vidc_class;
-static unsigned int vidc_mmu_subsystem[] = {MSM_SUBSYSTEM_VIDEO};
 
 static const struct file_operations vidc_fops = {
 	.owner = THIS_MODULE,
@@ -421,12 +420,6 @@ void vidc_cleanup_addr_table(struct video_client_ctx *client_ctx,
 	if (!client_ctx->user_ion_client)
 		goto bail_out_cleanup;
 	for (i = 0; i < *num_of_buffers; ++i) {
-		if (buf_addr_table[i].client_data) {
-			msm_subsystem_unmap_buffer(
-			(struct msm_mapped_buffer *)
-			buf_addr_table[i].client_data);
-			buf_addr_table[i].client_data = NULL;
-		}
 		if (!IS_ERR_OR_NULL(buf_addr_table[i].buff_ion_handle)) {
 			if (!IS_ERR_OR_NULL(client_ctx->user_ion_client)) {
 				ion_unmap_kernel(client_ctx->user_ion_client,
@@ -448,11 +441,6 @@ void vidc_cleanup_addr_table(struct video_client_ctx *client_ctx,
 				buf_addr_table[i].buff_ion_handle = NULL;
 			}
 		}
-	}
-	if (client_ctx->vcd_h264_mv_buffer.client_data) {
-		msm_subsystem_unmap_buffer((struct msm_mapped_buffer *)
-		client_ctx->vcd_h264_mv_buffer.client_data);
-		client_ctx->vcd_h264_mv_buffer.client_data = NULL;
 	}
 	if (!IS_ERR_OR_NULL(client_ctx->h264_mv_ion_handle)) {
 		if (!IS_ERR_OR_NULL(client_ctx->user_ion_client)) {
@@ -565,16 +553,14 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 	unsigned long len, phys_addr;
 	struct file *file = NULL;
 	u32 *num_of_buffers = NULL;
-	u32 i, flags;
+	u32 i;
 	struct buf_addr_table *buf_addr_table;
-	struct msm_mapped_buffer *mapped_buffer = NULL;
 	struct ion_handle *buff_ion_handle = NULL;
 	unsigned long ionflag = 0;
 	unsigned long iova = 0;
 	int ret = 0;
 	unsigned long buffer_size  = 0;
 	size_t ion_len;
-	unsigned long mapped_length = length;
 
 	if (!client_ctx || !length)
 		return false;
@@ -590,7 +576,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 		num_of_buffers = &client_ctx->num_of_output_buffers;
 		DBG("%s(): buffer = OUTPUT #Buf = %d\n",
 			__func__, *num_of_buffers);
-		mapped_length = length * 2; /* workaround for iommu video h/w bug */
+		length = length * 2; /* workaround for iommu video h/w bug */
 	}
 
 	if (*num_of_buffers == max_num_buffers) {
@@ -610,26 +596,8 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 		goto bail_out_add;
 	} else {
 		if (!vcd_get_ion_status()) {
-			if (get_pmem_file(pmem_fd, &phys_addr,
-					kernel_vaddr, &len, &file)) {
-				ERR("%s(): get_pmem_file failed\n", __func__);
-				goto bail_out_add;
-			}
-			put_pmem_file(file);
-			flags = (buffer == BUFFER_TYPE_INPUT)
-			? MSM_SUBSYSTEM_MAP_IOVA :
-			MSM_SUBSYSTEM_MAP_IOVA|MSM_SUBSYSTEM_ALIGN_IOVA_8K;
-			mapped_buffer = msm_subsystem_map_buffer(phys_addr,
-			mapped_length, flags, vidc_mmu_subsystem,
-			sizeof(vidc_mmu_subsystem)/sizeof(unsigned int));
-			if (IS_ERR(mapped_buffer)) {
-				pr_err("buffer map failed");
-				goto bail_out_add;
-			}
-			buf_addr_table[*num_of_buffers].client_data = (void *)
-				mapped_buffer;
-			buf_addr_table[*num_of_buffers].dev_addr =
-				mapped_buffer->iova[0];
+			pr_err("PMEM not available\n");
+			goto bail_out_add;
 		} else {
 			buff_ion_handle = ion_import_dma_buf(
 				client_ctx->user_ion_client, pmem_fd);
@@ -675,7 +643,7 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 						VIDEO_DOMAIN,
 						VIDEO_MAIN_POOL,
 						SZ_8K,
-						mapped_length,
+						length,
 						(unsigned long *) &iova,
 						(unsigned long *) &buffer_size,
 						0,
@@ -699,7 +667,6 @@ u32 vidc_insert_addr_table(struct video_client_ctx *client_ctx,
 		buf_addr_table[*num_of_buffers].kernel_vaddr = *kernel_vaddr;
 		buf_addr_table[*num_of_buffers].pmem_fd = pmem_fd;
 		buf_addr_table[*num_of_buffers].file = file;
-		buf_addr_table[*num_of_buffers].buff_len = length;
 		buf_addr_table[*num_of_buffers].phy_addr = phys_addr;
 		buf_addr_table[*num_of_buffers].buff_ion_handle =
 						buff_ion_handle;
@@ -781,7 +748,6 @@ u32 vidc_insert_addr_table_kernel(struct video_client_ctx *client_ctx,
 		buf_addr_table[*num_of_buffers].kernel_vaddr = kernel_vaddr;
 		buf_addr_table[*num_of_buffers].pmem_fd = -1;
 		buf_addr_table[*num_of_buffers].file = NULL;
-		buf_addr_table[*num_of_buffers].buff_len = length;
 		buf_addr_table[*num_of_buffers].phy_addr = phys_addr;
 		buf_addr_table[*num_of_buffers].buff_ion_handle = NULL;
 		*num_of_buffers = *num_of_buffers + 1;
@@ -831,11 +797,6 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 			__func__, client_ctx, user_vaddr);
 		goto bail_out_del;
 	}
-	if (buf_addr_table[i].client_data) {
-		msm_subsystem_unmap_buffer(
-		(struct msm_mapped_buffer *)buf_addr_table[i].client_data);
-		buf_addr_table[i].client_data = NULL;
-	}
 	*kernel_vaddr = buf_addr_table[i].kernel_vaddr;
 	if (buf_addr_table[i].buff_ion_handle) {
 		ion_unmap_kernel(client_ctx->user_ion_client,
@@ -866,8 +827,6 @@ u32 vidc_delete_addr_table(struct video_client_ctx *client_ctx,
 			buf_addr_table[*num_of_buffers - 1].pmem_fd;
 		buf_addr_table[i].file =
 			buf_addr_table[*num_of_buffers - 1].file;
-		buf_addr_table[i].buff_len =
-			buf_addr_table[*num_of_buffers - 1].buff_len;
 		buf_addr_table[i].buff_ion_handle =
 			buf_addr_table[*num_of_buffers - 1].buff_ion_handle;
 	}
@@ -917,8 +876,7 @@ void  vidc_timer_start(void *timer_handle, u32 time_out)
 	struct vidc_timer *hw_timer = (struct vidc_timer *)timer_handle;
 	DBG("%s(): start timer\n ", __func__);
 	if (hw_timer) {
-        //hw_timer->hw_timeout.expires = jiffies + 1*HZ;	
-        hw_timer->hw_timeout.expires = jiffies + 10*HZ;	
+		hw_timer->hw_timeout.expires = jiffies + 1*HZ;
 		add_timer(&hw_timer->hw_timeout);
 	}
 }

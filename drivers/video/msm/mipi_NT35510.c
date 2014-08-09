@@ -428,7 +428,7 @@ static char video26[6] = {
 static char video27[2] = {
 	0x35, 0x00,
 };
-
+static char config_video_MADCTL[2] = {0x36, 0xC0};
 static struct dsi_cmd_desc nt35510_video_display_on_cmds[] = {
 	{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(video0), video0},
 	{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(video1), video1},
@@ -464,6 +464,10 @@ static struct dsi_cmd_desc nt35510_video_display_on_cmds[] = {
 			display_on},
 };
 
+static struct dsi_cmd_desc nt35510_video_display_on_cmds_rotate[] = {
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
+		sizeof(config_video_MADCTL), config_video_MADCTL},
+};
 static int mipi_nt35510_lcd_on(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;

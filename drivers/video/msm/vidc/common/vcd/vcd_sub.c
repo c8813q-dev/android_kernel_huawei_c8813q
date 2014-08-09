@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,9 +11,9 @@
  *
  */
 #include <linux/memory_alloc.h>
-#include <mach/msm_subsystem_map.h>
 #include <asm/div64.h>
 #include <media/msm/vidc_type.h>
+#include <mach/iommu_domains.h>
 #include "vcd.h"
 #include "vdec_internal.h"
 
@@ -24,19 +24,17 @@
 
 struct vcd_msm_map_buffer {
 	phys_addr_t phy_addr;
-	struct msm_mapped_buffer *mapped_buffer;
+	void *vaddr;
 	struct ion_handle *alloc_handle;
 	u32 in_use;
 };
 static struct vcd_msm_map_buffer msm_mapped_buffer_table[MAP_TABLE_SZ];
-static unsigned int vidc_mmu_subsystem[] = {MSM_SUBSYSTEM_VIDEO};
 
 static int vcd_pmem_alloc(size_t sz, u8 **kernel_vaddr, u8 **phy_addr,
 			 struct vcd_clnt_ctxt *cctxt)
 {
-	u32 memtype, i = 0, flags = 0;
+	u32 memtype, i = 0;
 	struct vcd_msm_map_buffer *map_buffer = NULL;
-	struct msm_mapped_buffer *mapped_buffer = NULL;
 	unsigned long iova = 0;
 	unsigned long buffer_size = 0;
 	int ret = 0;
@@ -64,36 +62,13 @@ static int vcd_pmem_alloc(size_t sz, u8 **kernel_vaddr, u8 **phy_addr,
 	res_trk_set_mem_type(DDL_MM_MEM);
 	memtype = res_trk_get_mem_type();
 	if (!cctxt->vcd_enable_ion) {
-		map_buffer->phy_addr = (phys_addr_t)
-		allocate_contiguous_memory_nomap(sz, memtype, SZ_4K);
-		if (!map_buffer->phy_addr) {
-			pr_err("%s() acm alloc failed", __func__);
-			goto free_map_table;
-		}
-		flags = MSM_SUBSYSTEM_MAP_IOVA | MSM_SUBSYSTEM_MAP_KADDR;
-		map_buffer->mapped_buffer =
-		msm_subsystem_map_buffer((unsigned long)map_buffer->phy_addr,
-		sz, flags, vidc_mmu_subsystem,
-		sizeof(vidc_mmu_subsystem)/sizeof(unsigned int));
-		if (IS_ERR(map_buffer->mapped_buffer)) {
-			pr_err(" %s() buffer map failed", __func__);
-			goto free_acm_alloc;
-		}
-		mapped_buffer = map_buffer->mapped_buffer;
-		if (!mapped_buffer->vaddr || !mapped_buffer->iova[0]) {
-			pr_err("%s() map buffers failed", __func__);
-			goto free_map_buffers;
-		}
-		*phy_addr = (u8 *) mapped_buffer->iova[0];
-		*kernel_vaddr = (u8 *) mapped_buffer->vaddr;
-		VCD_MSG_LOW("vcd_pmem_alloc: phys(0x%x), virt(0x%x), "\
-			"sz(%u), flags(0x%x)", (u32)*phy_addr,
-			(u32)*kernel_vaddr, sz, (u32)flags);
+		pr_err("ION must be enabled\n");
+		goto free_map_table;
 	} else {
 		map_buffer->alloc_handle = ion_alloc(
 			    cctxt->vcd_ion_client, sz, SZ_4K,
-			    memtype, 0);
-		if (!map_buffer->alloc_handle) {
+			    memtype, res_trk_get_ion_flags());
+		if (IS_ERR_OR_NULL(map_buffer->alloc_handle)) {
 			pr_err("%s() ION alloc failed", __func__);
 			goto bailout;
 		}
@@ -106,6 +81,7 @@ static int vcd_pmem_alloc(size_t sz, u8 **kernel_vaddr, u8 **phy_addr,
 		*kernel_vaddr = (u8 *) ion_map_kernel(
 				cctxt->vcd_ion_client,
 				map_buffer->alloc_handle);
+		map_buffer->vaddr = *kernel_vaddr;
 		if (!(*kernel_vaddr)) {
 			pr_err("%s() ION map failed", __func__);
 			goto ion_free_bailout;
@@ -143,8 +119,6 @@ static int vcd_pmem_alloc(size_t sz, u8 **kernel_vaddr, u8 **phy_addr,
 			goto free_map_table;
 		}
 		*phy_addr = (u8 *)map_buffer->phy_addr;
-		mapped_buffer = NULL;
-		map_buffer->mapped_buffer = NULL;
 		VCD_MSG_LOW("vcd_ion_alloc: phys(0x%x), virt(0x%x), "\
 			"sz(%u), ionflags(0x%x)", (u32)*phy_addr,
 			(u32)*kernel_vaddr, sz, (u32)ionflag);
@@ -152,15 +126,6 @@ static int vcd_pmem_alloc(size_t sz, u8 **kernel_vaddr, u8 **phy_addr,
 
 	return 0;
 
-free_map_buffers:
-	if (map_buffer->mapped_buffer)
-		msm_subsystem_unmap_buffer(map_buffer->mapped_buffer);
-free_acm_alloc:
-	if (!cctxt->vcd_enable_ion) {
-		free_contiguous_memory_by_paddr(
-		(unsigned long)map_buffer->phy_addr);
-	}
-	return -ENOMEM;
 ion_map_bailout:
 	ion_unmap_kernel(cctxt->vcd_ion_client, map_buffer->alloc_handle);
 ion_free_bailout:
@@ -183,8 +148,7 @@ static int vcd_pmem_free(u8 *kernel_vaddr, u8 *phy_addr,
 	}
 	for (i = 0; i  < MAP_TABLE_SZ; i++) {
 		if (msm_mapped_buffer_table[i].in_use &&
-			(msm_mapped_buffer_table[i]
-			.mapped_buffer->vaddr == kernel_vaddr)) {
+			(msm_mapped_buffer_table[i].vaddr == kernel_vaddr)) {
 			map_buffer = &msm_mapped_buffer_table[i];
 			map_buffer->in_use = 0;
 			break;
@@ -194,8 +158,6 @@ static int vcd_pmem_free(u8 *kernel_vaddr, u8 *phy_addr,
 		pr_err("%s() Entry not found", __func__);
 		goto bailout;
 	}
-	if (map_buffer->mapped_buffer)
-		msm_subsystem_unmap_buffer(map_buffer->mapped_buffer);
 	if (cctxt->vcd_enable_ion) {
 		VCD_MSG_LOW("vcd_ion_free: phys(0x%x), virt(0x%x)",
 			(u32)phy_addr, (u32)kernel_vaddr);
@@ -784,7 +746,11 @@ u32 vcd_free_one_buffer_internal(
 		buf_pool->allocated--;
 	}
 
-	memset(buf_entry, 0, sizeof(struct vcd_buffer_entry));
+	buf_entry->valid = buf_entry->allocated = buf_entry->in_use = 0;
+	buf_entry->alloc = buf_entry->virtual = buf_entry->physical = NULL;
+	buf_entry->sz = 0;
+	memset(&buf_entry->frame, 0, sizeof(struct vcd_frame_data));
+
 	buf_pool->validated--;
 	if (buf_pool->validated == 0)
 		vcd_free_buffer_pool_entries(buf_pool);
@@ -811,8 +777,9 @@ u32 vcd_free_buffers_internal(
 			}
 		}
 
-    	vcd_reset_buffer_pool_for_reuse(buf_pool);
 	}
+
+	vcd_reset_buffer_pool_for_reuse(buf_pool);
 
 	return rc;
 }
@@ -919,7 +886,7 @@ struct vcd_buffer_entry *vcd_find_buffer_pool_entry
 	u32 i;
 	u32 found = false;
 
-	for (i = 0; i <= pool->count && !found; i++) {
+	for (i = 1; i <= pool->count && !found; i++) {
 		if (pool->entries[i].virtual == addr)
 			found = true;
 
@@ -1253,7 +1220,7 @@ u32 vcd_validate_driver_handle(
 	driver_handle--;
 
 	if (driver_handle < 0 ||
-		driver_handle >= VCD_DRIVER_INSTANCE_MAX ||
+		driver_handle >= VCD_DRIVER_CLIENTS_MAX ||
 		!dev_ctxt->driver_ids[driver_handle]) {
 		return false;
 	} else {
@@ -1679,7 +1646,7 @@ u32 vcd_process_cmd_sess_start(struct vcd_clnt_ctxt *cctxt)
 void vcd_send_frame_done_in_eos(struct vcd_clnt_ctxt *cctxt,
 	 struct vcd_frame_data *input_frame, u32 valid_opbuf)
 {
-	VCD_MSG_LOW("vcd_send_frame_done_in_eos:");
+	VCD_MSG_HIGH("vcd_send_frame_done_in_eos:");
 
 	if (!input_frame->virtual && !valid_opbuf) {
 		VCD_MSG_MED("Sending NULL output with EOS");
@@ -1799,12 +1766,41 @@ void vcd_send_frame_done_in_eos_for_enc(
 	}
 }
 
+struct vcd_transc *vcd_get_first_in_use_trans_for_clnt(
+	struct vcd_clnt_ctxt *cctxt)
+{
+	u32 i;
+	struct vcd_dev_ctxt *dev_ctxt;
+	VCD_MSG_HIGH("%s: ", __func__);
+	dev_ctxt = cctxt->dev_ctxt;
+	if (!dev_ctxt->trans_tbl) {
+		VCD_MSG_ERROR("%s: Null trans_tbl", __func__);
+		return NULL;
+	}
+	i = 0;
+	while (i < dev_ctxt->trans_tbl_size) {
+		if ((cctxt == dev_ctxt->trans_tbl[i].cctxt) &&
+			(dev_ctxt->trans_tbl[i].in_use)) {
+			VCD_MSG_MED("%s: found transc = 0x%p",
+				__func__, &dev_ctxt->trans_tbl[i]);
+			break;
+		}
+		i++;
+	}
+	if (i == dev_ctxt->trans_tbl_size) {
+		VCD_MSG_ERROR("%s: in_use transction not found",
+			__func__);
+		return NULL;
+	} else
+		return &dev_ctxt->trans_tbl[i];
+}
+
 u32 vcd_handle_recvd_eos(
 	struct vcd_clnt_ctxt *cctxt,
 	 struct vcd_frame_data *input_frame, u32 *pb_eos_handled)
 {
 	u32 rc;
-
+	struct vcd_transc *transc;
 	VCD_MSG_LOW("vcd_handle_recvd_eos:");
 
 	*pb_eos_handled = false;
@@ -1822,13 +1818,21 @@ u32 vcd_handle_recvd_eos(
 		*pb_eos_handled = true;
 	else if (cctxt->decoding && !input_frame->virtual)
 		cctxt->sched_clnt_hdl->tkns++;
-	else if (!cctxt->decoding) {
-		vcd_send_frame_done_in_eos(cctxt, input_frame, false);
-		if (cctxt->status.mask & VCD_EOS_WAIT_OP_BUF) {
-			vcd_do_client_state_transition(cctxt,
-				VCD_CLIENT_STATE_EOS,
-				CLIENT_STATE_EVENT_NUMBER
-				(encode_frame));
+	else if (!cctxt->decoding && !cctxt->status.frame_delayed) {
+		if (!cctxt->status.frame_submitted) {
+			vcd_send_frame_done_in_eos(cctxt, input_frame, false);
+			if (cctxt->status.mask & VCD_EOS_WAIT_OP_BUF)
+				vcd_do_client_state_transition(cctxt,
+					VCD_CLIENT_STATE_EOS,
+					CLIENT_STATE_EVENT_NUMBER
+					(encode_frame));
+		} else {
+			transc = vcd_get_first_in_use_trans_for_clnt(cctxt);
+			if (transc) {
+				transc->flags |= VCD_FRAME_FLAG_EOS;
+				VCD_MSG_HIGH("%s: Add EOS flag to transc",
+				       __func__);
+			}
 		}
 		*pb_eos_handled = true;
 	}
@@ -1979,6 +1983,11 @@ u32 vcd_handle_input_done(
 	transc = (struct vcd_transc *)frame->vcd_frm.ip_frm_tag;
 	orig_frame = vcd_find_buffer_pool_entry(&cctxt->in_buf_pool,
 					 transc->ip_buf_entry->virtual);
+
+	if (!orig_frame) {
+		rc = VCD_ERR_ILLEGAL_PARM;
+		VCD_FAILED_RETURN(rc, "Couldn't find buffer");
+	}
 
 	if ((transc->ip_buf_entry->frame.virtual !=
 		 frame->vcd_frm.virtual)
@@ -3049,6 +3058,7 @@ u32 vcd_req_perf_level(
 {
 	u32 rc;
 	u32 res_trk_perf_level;
+	u32 turbo_perf_level;
 	if (!perf_level) {
 		VCD_MSG_ERROR("Invalid parameters\n");
 		return -EINVAL;
@@ -3058,10 +3068,13 @@ u32 vcd_req_perf_level(
 		rc = -ENOTSUPP;
 		goto perf_level_not_supp;
 	}
+	turbo_perf_level = get_res_trk_perf_level(VCD_PERF_LEVEL_TURBO);
 	rc = vcd_set_perf_level(cctxt->dev_ctxt, res_trk_perf_level);
 	if (!rc) {
 		cctxt->reqd_perf_lvl = res_trk_perf_level;
 		cctxt->perf_set_by_client = 1;
+		if (res_trk_perf_level == turbo_perf_level)
+			cctxt->is_turbo_enabled = true;
 	}
 perf_level_not_supp:
 	return rc;
@@ -3467,6 +3480,17 @@ u32 vcd_set_num_slices(struct vcd_clnt_ctxt *cctxt)
 					__func__, cctxt->num_slices);
 	} else {
 		cctxt->num_slices = 1;
+	}
+	return rc;
+}
+
+u32 vcd_handle_ltr_use_failed(struct vcd_clnt_ctxt *cctxt,
+	void *payload, size_t sz, u32 status)
+{
+	u32 rc = VCD_S_SUCCESS;
+	if (payload && cctxt) {
+		cctxt->callback(VCD_EVT_IND_INFO_LTRUSE_FAILED,
+			status, payload, sz, cctxt, cctxt->client_data);
 	}
 	return rc;
 }

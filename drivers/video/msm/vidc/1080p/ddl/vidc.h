@@ -103,6 +103,7 @@
 #define VIDC_1080P_ERROR_SPS_PARSE_ERROR         129
 #define VIDC_1080P_ERROR_PPS_PARSE_ERROR         130
 #define VIDC_1080P_ERROR_SLICE_PARSE_ERROR       131
+#define VIDC_1080P_ERROR_NON_IDR_FRAME_TYPE      132
 #define VIDC_1080P_ERROR_SYNC_POINT_NOT_RECEIVED  171
 
 #define VIDC_1080P_WARN_COMMAND_FLUSHED                  145
@@ -277,6 +278,7 @@ enum vidc_1080p_decode_frame{
 	VIDC_1080P_DECODE_FRAMETYPE_P          = 2,
 	VIDC_1080P_DECODE_FRAMETYPE_B          = 3,
 	VIDC_1080P_DECODE_FRAMETYPE_OTHERS     = 4,
+	VIDC_1080P_DECODE_FRAMETYPE_IDR        = 5,
 	VIDC_1080P_DECODE_FRAMETYPE_32BIT      = 0x7FFFFFFF
 };
 enum vidc_1080P_decode_frame_correct_type {
@@ -311,6 +313,7 @@ enum vidc_1080p_decode_idc_format {
 #define VIDC_1080P_PROFILE_H264_MAIN         0x00000000
 #define VIDC_1080P_PROFILE_H264_HIGH         0x00000001
 #define VIDC_1080P_PROFILE_H264_BASELINE     0x00000002
+#define VIDC_1080P_PROFILE_H264_CONSTRAINED_BASELINE     0x00000003
 
 
 enum vidc_1080p_decode{
@@ -397,6 +400,10 @@ struct vidc_1080p_enc_frame_start_param{
 	u32 intra_frame;
 	u32 input_flush;
 	u32 slice_enable;
+	u32 store_ltr0;
+	u32 store_ltr1;
+	u32 use_ltr0;
+	u32 use_ltr1;
 	enum vidc_1080p_encode encode;
 };
 struct vidc_1080p_enc_frame_info{
