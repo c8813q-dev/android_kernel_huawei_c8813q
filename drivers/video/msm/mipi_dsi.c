@@ -73,8 +73,6 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	unsigned int datamask = 0;
 #endif
 
-	pr_debug("%s+:\n", __func__);
-
 	mfd = platform_get_drvdata(pdev);
 	pinfo = &mfd->panel_info;
 
@@ -83,14 +81,15 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	else
 		down(&mfd->dma->mutex);
 
-	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
-		mipi_dsi_prepare_clocks();
-		mipi_dsi_ahb_ctrl(1);
-		mipi_dsi_clk_enable();
+	mdp4_overlay_dsi_state_set(ST_DSI_SUSPEND);
 
-		/* make sure dsi_cmd_mdp is idle */
-		mipi_dsi_cmd_mdp_busy();
-	}
+	/* make sure dsi clk is on so that
+	 * dcs commands can be sent
+	 */
+	mipi_dsi_clk_cfg(1);
+
+	/* make sure dsi_cmd_mdp is idle */
+	mipi_dsi_cmd_mdp_busy();
 
 	/*
 	 * Desctiption: change to DSI_CMD_MODE since it needed to
@@ -109,8 +108,8 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	}
 
 	ret = panel_next_off(pdev);
-
 #ifdef CONFIG_HUAWEI_KERNEL
+	
 	mipi  = &mfd->panel_info.mipi;
 	/* request data line to enter ulps mode */
 	if (mipi->data_lane3)
@@ -128,7 +127,11 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	MIPI_OUTP(MIPI_DSI_BASE + 0xA8, datamask|(1<<4));
 	mdelay(1);
 #endif
+#ifdef CONFIG_MSM_BUS_SCALING
+	mdp_bus_scale_update_request(0);
+#endif
 
+	spin_lock_bh(&dsi_clk_lock);
 	mipi_dsi_clk_disable();
 
 	/* disbale dsi engine */
@@ -137,6 +140,7 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	mipi_dsi_phy_ctrl(0);
 
 	mipi_dsi_ahb_ctrl(0);
+	spin_unlock_bh(&dsi_clk_lock);
 
 	mipi_dsi_unprepare_clocks();
 	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
@@ -165,13 +169,9 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	u32 ystride, bpp, data;
 	u32 dummy_xres, dummy_yres;
 	int target_type = 0;
-
 #ifdef CONFIG_HUAWEI_KERNEL
 	unsigned int datamask = 0;
 #endif
-
-	pr_debug("%s+:\n", __func__);
-
 	mfd = platform_get_drvdata(pdev);
 	fbi = mfd->fbi;
 	var = &fbi->var;
@@ -207,7 +207,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		target_type = mipi_dsi_pdata->target_type;
 
 	mipi_dsi_phy_init(0, &(mfd->panel_info), target_type);
-
 /*
   * It because of the reset and clock order,
   * that Qualcomm baseband will be issued a special waveform,
@@ -219,7 +218,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	mipi_dsi_clk_enable();
 	//local_bh_enable();
 #endif
-
 	MIPI_OUTP(MIPI_DSI_BASE + 0x114, 1);
 	MIPI_OUTP(MIPI_DSI_BASE + 0x114, 0);
 
@@ -250,7 +248,8 @@ static int mipi_dsi_on(struct platform_device *pdev)
 					width + dummy_xres + hfp - 1));
 		} else {
 			/* DSI_LAN_SWAP_CTRL */
-			MIPI_OUTP(MIPI_DSI_BASE + 0x00ac, mipi->dlane_swap);
+			MIPI_OUTP(MIPI_DSI_BASE + 0x00ac,
+						mipi_dsi_pdata->dlane_swap);
 
 			MIPI_OUTP(MIPI_DSI_BASE + 0x20,
 				((hbp + width + dummy_xres) << 16 | (hbp)));
@@ -288,7 +287,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x58, data);
 	}
 
-	mipi_dsi_host_init(mipi);
+	mipi_dsi_host_init(mipi, mipi_dsi_pdata->dlane_swap);
 
 	if (mipi->force_clk_lane_hs) {
 		u32 tmp;
@@ -303,7 +302,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		mutex_lock(&mfd->dma->ov_mutex);
 	else
 		down(&mfd->dma->mutex);
-
 #ifdef CONFIG_HUAWEI_KERNEL
 	/*when here there is a wrong sequence bofore ,so add 5 ms hope lcd panel can enter the right mode */
 	mdelay(5);	
@@ -372,10 +370,13 @@ static int mipi_dsi_on(struct platform_device *pdev)
 			}
 			mipi_dsi_set_tear_on(mfd);
 		}
-		mipi_dsi_clk_disable();
-		mipi_dsi_ahb_ctrl(0);
-		mipi_dsi_unprepare_clocks();
 	}
+
+#ifdef CONFIG_MSM_BUS_SCALING
+	mdp_bus_scale_update_request(2);
+#endif
+
+	mdp4_overlay_dsi_state_set(ST_DSI_RESUME);
 
 	if (mdp_rev >= MDP_REV_41)
 		mutex_unlock(&mfd->dma->ov_mutex);
@@ -385,11 +386,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	pr_debug("%s-:\n", __func__);
 
 	return ret;
-}
-
-static int mipi_dsi_late_init(struct platform_device *pdev)
-{
-	return panel_next_late_init(pdev);
 }
 
 
@@ -511,6 +507,9 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 	if (pdev_list_cnt >= MSM_FB_MAX_DEV_LIST)
 		return -ENOMEM;
 
+	if (!mfd->cont_splash_done)
+		cont_splash_clk_ctrl(1);
+
 	mdp_dev = platform_device_alloc("mdp", pdev->id);
 	if (!mdp_dev)
 		return -ENOMEM;
@@ -536,7 +535,6 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 	pdata = mdp_dev->dev.platform_data;
 	pdata->on = mipi_dsi_on;
 	pdata->off = mipi_dsi_off;
-	pdata->late_init = mipi_dsi_late_init;
 	pdata->next = pdev;
 
 	/*
@@ -555,14 +553,17 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 		if (mipi_dsi_pdata->get_lane_config() != 2) {
 			pr_info("Changing to DSI Single Mode Configuration\n");
 #ifdef CONFIG_FB_MSM_MDP303
+			/*temp modify, qualcomm SR : 00641512*/
+		#ifndef CONFIG_HUAWEI_KERNEL
 			update_lane_config(pinfo);
+		#endif
 #endif
 		}
 	}
 
 	if (mfd->index == 0)
 /* Always inport 24 bit*/
-#ifndef CONFIG_HUAWEI_KERNEL
+#ifndef CONFIG_HUAWEI_KERNEL	
 		mfd->fb_imgType = MSMFB_DEFAULT_TYPE;
 #else
 		mfd->fb_imgType = MDP_RGBA_8888;
@@ -632,10 +633,8 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 	if (rc)
 		goto mipi_dsi_probe_err;
 
-	if ((dsi_pclk_rate < 3300000) || (dsi_pclk_rate > 223000000)) {
-		pr_err("%s: Pixel clock not supported\n", __func__);
+	if ((dsi_pclk_rate < 3300000) || (dsi_pclk_rate > 103300000))
 		dsi_pclk_rate = 35000000;
-	}
 	mipi->dsi_pclk_rate = dsi_pclk_rate;
 
 	/*
@@ -651,9 +650,6 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 		goto mipi_dsi_probe_err;
 
 	pdev_list[pdev_list_cnt++] = pdev;
-
-	if (!mfd->cont_splash_done)
-		cont_splash_clk_ctrl(1);
 
 return 0;
 

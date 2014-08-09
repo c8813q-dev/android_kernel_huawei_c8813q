@@ -108,6 +108,7 @@ enum dsi_trigger_type {
 #define DSI_CMD_DST_FORMAT_RGB666	7
 #define DSI_CMD_DST_FORMAT_RGB888	8
 
+/* add qcom patch to work around lcd esd issue */
 #define DSI_INTR_ERROR_MASK		BIT(25)
 #define DSI_INTR_ERROR			BIT(24)
 #define DSI_INTR_BTA_DONE_MASK		BIT(21)
@@ -267,16 +268,13 @@ struct dsi_kickoff_action {
 typedef void (*fxn)(u32 data);
 
 #define CMD_REQ_RX	0x0001
-#define CMD_REQ_COMMIT	0x0002
-#define CMD_CLK_CTRL	0x0004
+#define CMD_REQ_COMMIT 0x0002
 #define CMD_REQ_NO_MAX_PKT_SIZE 0x0008
-#define CMD_MDP3_CMD_PANEL 0x80000000  /* mdp3 only */
 
 struct dcs_cmd_req {
 	struct dsi_cmd_desc *cmds;
 	int cmds_cnt;
 	u32 flags;
-	struct dsi_buf *rbuf;
 	int rlen;	/* rx length */
 	fxn cb;
 };
@@ -296,8 +294,15 @@ void mipi_dsi_lane_cfg(void);
 void mipi_dsi_bist_ctrl(void);
 int mipi_dsi_buf_alloc(struct dsi_buf *, int size);
 int mipi_dsi_cmd_dma_add(struct dsi_buf *dp, struct dsi_cmd_desc *cm);
+int mipi_dsi_cmds_tx(struct dsi_buf *dp, struct dsi_cmd_desc *cmds, int cnt);
+
+int mipi_dsi_cmd_dma_tx(struct dsi_buf *dp);
 int mipi_dsi_cmd_reg_tx(uint32 data);
-void mipi_dsi_host_init(struct mipi_panel_info *pinfo);
+int mipi_dsi_cmds_rx(struct msm_fb_data_type *mfd,
+			struct dsi_buf *tp, struct dsi_buf *rp,
+			struct dsi_cmd_desc *cmds, int len);
+int mipi_dsi_cmd_dma_rx(struct dsi_buf *tp, int rlen);
+void mipi_dsi_host_init(struct mipi_panel_info *pinfo, char dlane_swap);
 void mipi_dsi_op_mode_config(int mode);
 void mipi_dsi_cmd_mode_ctrl(int enable);
 void mdp4_dsi_cmd_trigger(void);
@@ -305,12 +310,15 @@ void mipi_dsi_cmd_mdp_start(void);
 int mipi_dsi_ctrl_lock(int mdp);
 int mipi_dsi_ctrl_lock_query(void);
 void mipi_dsi_cmd_bta_sw_trigger(void);
+/* add qcom patch to work around lcd esd issue */
 int mipi_dsi_wait_for_bta_ack(void);
 void mipi_dsi_ack_err_status(void);
 void mipi_dsi_set_tear_on(struct msm_fb_data_type *mfd);
 void mipi_dsi_set_tear_off(struct msm_fb_data_type *mfd);
 void mipi_dsi_set_backlight(struct msm_fb_data_type *mfd, int level);
 void mipi_dsi_cmd_backlight_tx(struct dsi_buf *dp);
+void mipi_dsi_clk_enable(void);
+void mipi_dsi_clk_disable(void);
 void mipi_dsi_pre_kickoff_action(void);
 void mipi_dsi_post_kickoff_action(void);
 void mipi_dsi_pre_kickoff_add(struct dsi_kickoff_action *act);
@@ -319,52 +327,21 @@ void mipi_dsi_pre_kickoff_del(struct dsi_kickoff_action *act);
 void mipi_dsi_post_kickoff_del(struct dsi_kickoff_action *act);
 void mipi_dsi_controller_cfg(int enable);
 void mipi_dsi_sw_reset(void);
-void mipi_dsi_mdp_busy_wait(void);
+void mipi_dsi_mdp_busy_wait(struct msm_fb_data_type *mfd);
 
 irqreturn_t mipi_dsi_isr(int irq, void *ptr);
 
 void mipi_set_tx_power_mode(int mode);
+void mipi_dsi_phy_ctrl(int on);
 void mipi_dsi_phy_init(int panel_ndx, struct msm_panel_info const *panel_info,
 	int target_type);
 int mipi_dsi_clk_div_config(uint8 bpp, uint8 lanes,
 			    uint32 *expected_dsi_pclk);
 int mipi_dsi_clk_init(struct platform_device *pdev);
 void mipi_dsi_clk_deinit(struct device *dev);
-
-#ifdef CONFIG_FB_MSM_MIPI_DSI
-void mipi_dsi_clk_enable(void);
-void mipi_dsi_clk_disable(void);
 void mipi_dsi_prepare_clocks(void);
 void mipi_dsi_unprepare_clocks(void);
 void mipi_dsi_ahb_ctrl(u32 enable);
-void mipi_dsi_phy_ctrl(int on);
-#else
-static inline void mipi_dsi_clk_enable(void)
-{
-	/* empty */
-}
-void mipi_dsi_clk_disable(void)
-{
-	/* empty */
-}
-void mipi_dsi_prepare_clocks(void)
-{
-	/* empty */
-}
-void mipi_dsi_unprepare_clocks(void)
-{
-	/* empty */
-}
-void mipi_dsi_ahb_ctrl(u32 enable)
-{
-	/* empty */
-}
-void mipi_dsi_phy_ctrl(int on)
-{
-	/* empty */
-}
-#endif
-
 void cont_splash_clk_ctrl(int enable);
 void mipi_dsi_turn_on_clks(void);
 void mipi_dsi_turn_off_clks(void);
