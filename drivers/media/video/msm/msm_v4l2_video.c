@@ -950,5 +950,5 @@ static void __exit msm_v4l2_overlay_exit(void)
 module_init(msm_v4l2_overlay_init);
 module_exit(msm_v4l2_overlay_exit);
 
-MODULE_DESCRIPTION("MSM V4L2 Video Overlay Driver");
-MODULE_LICENSE("GPL v2");
+/*MODULE_DESCRIPTION("MSM V4L2 Video Overlay Driver");
+MODULE_LICENSE("GPL v2");*/
